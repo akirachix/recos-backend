@@ -1,7 +1,4 @@
 from django.db import models
-# from job.models import Job
-# from candidate.models import Candidate
-# from recruiter.models import Recruiter
 
 class Interview(models.Model):
     STATUS_CHOICES = [
@@ -9,9 +6,6 @@ class Interview(models.Model):
         ('Completed', 'Completed'),
         ('Canceled', 'Canceled'),
     ]
-    # job = models.ForeignKey(Job, on_delete=models.CASCADE)
-    # candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
-    # recruiter = models.ForeignKey(Recruiter, on_delete=models.CASCADE)
     scheduled_at = models.DateTimeField()
     interview_link = models.URLField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
