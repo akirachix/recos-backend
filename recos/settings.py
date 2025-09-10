@@ -37,11 +37,12 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    'rest_framework',
     'interviewConversation', 
     "job",
     "candidate",
     "api",
+    "rest_framework",
+    "ai_reports",
      "interview",
 ]
 
