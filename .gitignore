@@ -5,3 +5,7 @@ recosenv/
 __pycache__/
 db.sqlite3
 .env
+
+credentials.json
+saved_login.pickle
+.env

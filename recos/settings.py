@@ -53,6 +53,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'users',
     'companies',
+    "ai_reports",
+    "interview",
 ]
 
 MIDDLEWARE = [
