@@ -25,3 +25,4 @@ googleapis-common-protos==1.70.0
 reportlab==4.4.3
 charset-normalizer==3.4.3
 pillow==11.3.0
+python-dotenv
