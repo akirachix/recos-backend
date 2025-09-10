@@ -263,19 +263,21 @@ def forgot_password(request):
     user.save()
     
     subject = 'Password Reset Verification Code'
-    message = render_to_string('api/password_reset_email.html', {
-        'user': user,
-        'code': verification_code,
-        'site_name': getattr(settings, 'SITE_NAME', 'Your Site Name'),
-        'expiration_minutes': 15,
-    })
+    message = (
+        f"Hello {user.first_name},\n\n"
+        f"We received a request to reset your password. Use the verification code below:\n\n"
+        f"{verification_code}\n\n"
+        f"This code will expire in 15 minutes.\n\n"
+        f"If you didn't request this, please ignore this email.\n\n"
+        f"Thank you,\nThe {getattr(settings, 'SITE_NAME', 'Your Site Name')} Team"
+    )
+    
     send_mail(
         subject,
         message,
         settings.DEFAULT_FROM_EMAIL,
         [user.email],
         fail_silently=False,
-        html_message=message,
     )
     
     return Response({'message': 'Password reset code sent.'}, 
