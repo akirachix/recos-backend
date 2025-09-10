@@ -26,7 +26,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', default=False).lower() in ('true', '1', 't')
+DEBUG = os.getenv('DEBUG', default=False)
+if isinstance(DEBUG, bool):
+    pass
+else:
+    DEBUG = DEBUG.lower() in ('true', '1', 't')
 if DEBUG:
     CORS_ALLOWS_ALL_ORIGINS = True
 else:
