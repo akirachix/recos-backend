@@ -9,3 +9,7 @@ platformdirs==4.4.0
 sqlparse==0.5.3
 tomli==2.2.1
 typing-extensions==4.15.0
+djangorestframework==3.16.1
+reportlab==4.4.3
+charset-normalizer==3.4.3
+pillow==11.3.0
