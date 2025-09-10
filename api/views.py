@@ -1,3 +1,4 @@
+
 from django.shortcuts import render
 
 from interviewConversation.models import InterviewConversation
@@ -12,6 +13,19 @@ from django.http import HttpResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from interviewConversation.models import InterviewConversation
+from job.models import Job
+from candidate.models import Candidate
+from interview.models import Interview
+from .serializers import (
+    InterviewConversationSerializer, 
+    JobSerializer, 
+    CandidateSerializer, 
+    InterviewSerializer
+)
+from interview.utils import create_google_calendar_event
 
 class InterviewConversationViewSet(viewsets.ModelViewSet):
     queryset = InterviewConversation.objects.all()
@@ -24,7 +38,6 @@ class JobViewSet(viewsets.ModelViewSet):
 class CandidateViewSet(viewsets.ModelViewSet):
     queryset = Candidate.objects.all()
     serializer_class = CandidateSerializer
-
 
 def draw_wrapped_text(p, text, x, y, max_width, font_name="Helvetica", font_size=12, line_height=16, page_margin=100, page_height=letter[1]):
     from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -242,3 +255,20 @@ class AIReportViewSet(viewsets.ModelViewSet):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="ai_report_{ai_report.report_id}.pdf"'
         return response
+
+class InterviewViewSet(viewsets.ModelViewSet):
+    queryset = Interview.objects.all()
+    serializer_class = InterviewSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        interview = serializer.save()
+
+   
+        event_id, hangout_link = create_google_calendar_event(interview)
+        interview.google_event_id = event_id
+        interview.interview_link = hangout_link
+        interview.save()
+        output_serializer = self.get_serializer(interview)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
