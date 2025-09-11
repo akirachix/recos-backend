@@ -190,7 +190,7 @@ def logout_view(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_odoo_credentials(request):
-    if not request.user.has_perm('users.ass_odoocredentials'):
+    if not request.user.has_perm('users.add_odoocredentials'):
         return Response({'error':'You do not have permission to add Odoo Credentials'}, status=status.HTTP_403_FORBIDDEN)
     db_url = request.data.get('db_url')
     db_name = request.data.get('db_name')
