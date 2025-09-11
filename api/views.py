@@ -42,6 +42,8 @@ from .serializers import (
     AIReportCreateSerializer
 )
 from interview.utils import create_google_calendar_event
+from companies.services.company_sync_service import CompanySyncService
+
 
 class InterviewConversationViewSet(viewsets.ModelViewSet):
     queryset = InterviewConversation.objects.all()
@@ -93,7 +95,6 @@ class RecruiterRegistrationView(generics.CreateAPIView):
     queryset = Recruiter.objects.all()
     serializer_class = RecruiterSerializer
     permission_classes = [permissions.AllowAny]
-    
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -101,7 +102,12 @@ class RecruiterRegistrationView(generics.CreateAPIView):
         headers = self.get_success_headers(serializer.data)
         user = Recruiter.objects.get(email=serializer.data['email'])
         token, created = Token.objects.get_or_create(user=user)
-        
+        try:
+            perm = Permission.objects.get(name='add_odoocredentials')
+            user.user_permissions.add(perm)
+            user.save()
+        except Permission.DoesNotExist:
+            pass
         return Response({
             'user': serializer.data,
             'token': token.key
@@ -190,8 +196,9 @@ def logout_view(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_odoo_credentials(request):
-    if not request.user.has_perm('users.add_odoocredentials'):
-        return Response({'error':'You do not have permission to add Odoo Credentials'}, status=status.HTTP_403_FORBIDDEN)
+    if not request.user.is_active:
+        return Response({'error': 'User account is disabled'}, status=status.HTTP_403_FORBIDDEN)
+    
     db_url = request.data.get('db_url')
     db_name = request.data.get('db_name')
     email = request.data.get('email')
@@ -229,21 +236,30 @@ def add_odoo_credentials(request):
     
     try:
         companies = odoo_service.get_companies()
+        created_companies = []
         for company in companies:
-            Company.objects.get_or_create(
-            odoo_company_id=company['id'],
-            recruiter=request.user,
-            defaults={'company_name':company['name'],'created_at': timezone.now(), 'updated_at': timezone.now()}
-    )
+            comp, comp_created = Company.objects.get_or_create(
+                odoo_company_id=company['id'],
+                recruiter=request.user,
+                defaults={
+                    'company_name': company['name'],
+                    'is_active': True,
+                    'created_at': timezone.now(),
+                    'updated_at': timezone.now()
+                }
+            )
+            created_companies.append(comp)
     except Exception as e:
         return Response({'error': f'Failed to retrieve companies: {str(e)}'}, 
                         status=status.HTTP_400_BAD_REQUEST)
     
     serializer = OdooCredentialsSerializer(credentials)
+    companies_serializer = CompanySerializer(created_companies, many=True)
+    
     return Response({
         'message': 'Odoo credentials added successfully',
         'credentials': serializer.data,
-        'companies': companies
+        'companies': companies_serializer.data
     }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 @api_view(['GET'])
@@ -253,10 +269,14 @@ def get_odoo_credentials(request):
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def get_companies(request):
-    companies = Company.objects.filter(recruiter=request.user)
-    serializer = CompanySerializer(companies, many=True)
-    return Response(serializer.data)
+    try:
+        companies = Company.objects.filter(recruiter=request.user)
+        serializer = CompanySerializer(companies, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        return Response({'error': f'Failed to retrieve companies: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

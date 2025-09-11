@@ -1,7 +1,7 @@
 from users.models import OdooCredentials
 from users.services.odoo_service import OdooService
-from .models import Company
-from .job_sync_services import JobSyncServices
+from companies.models import Company
+# from job.services.job_sync_service import JobSyncServices
 class CompanySyncService:
     @staticmethod
     def sync_recruiter_companies(recruiter):

@@ -10,6 +10,7 @@ class OdooService:
         self.api_key = api_key
         self.uid = None
         self.session = None
+        self.context = {}
     
     def authenticate(self):
         endpoint = urljoin(self.db_url, '/jsonrpc')
@@ -134,4 +135,28 @@ class OdooService:
             'search_read', 
             [domain], 
             {'fields': ['name', 'partner_name', 'email_from', 'stage_id', 'company_id', 'job_id', 'date_open', 'date_last_stage_update']}
+        )
+    
+    def get_user_info(self):
+        return self.call_odoo(
+            'res.users', 
+            'read', 
+            [[self.uid]], 
+            {'fields': ['id', 'name', 'email', 'company_id', 'company_ids']}
+        )
+
+    def get_companies(self):
+        return self.call_odoo(
+            'res.company', 
+            'search_read', 
+            [[]], 
+            {'fields': ['id', 'name', 'country_id']}
+        )
+    
+    def set_company_context(self, company_id):
+        self.context['allowed_company_ids'] = [company_id]
+        self.call_odoo(
+            'res.users',
+            'write',
+            [[self.uid], {'company_id': company_id}]
         )
