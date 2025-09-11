@@ -6,8 +6,10 @@ class Company(models.Model):
     odoo_company_id = models.IntegerField(null=True, blank=True)
     company_name = models.CharField(max_length=100)
     recruiter = models.ForeignKey(Recruiter, on_delete=models.CASCADE, related_name='companies')
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
 
     class Meta:
         unique_together = ('recruiter', 'company_name')

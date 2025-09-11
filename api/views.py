@@ -223,11 +223,39 @@ def get_companies(request):
     companies = Company.objects.filter(recruiter=request.user)
     serializer = CompanySerializer(companies, many=True)
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_all_data(request):
+    try:
+        synced_companies = CompanySyncService.sync_recruiter_companies(request.user, sync_jobs=True)
+        all_candidates = []
+        for company in synced_companies:
+            for job in company.jobs.all():
+                try:
+                    synced_candidates = CandidateSyncService.sync_candidates_for_job(job)
+                    all_candidates.extend(synced_candidates)
+                except Exception as e:
+                    print(f"Error syncing candidates for job {job.job_title}: {str(e)}")
+        
+        companies_data = CompanySerializer(synced_companies, many=True).data
+        candidates_data = CandidateSerializer(all_candidates, many=True).data
+        
+        return Response({
+            'message': f'Successfully synced {len(synced_companies)} companies and {len(all_candidates)} candidates',
+            'companies': companies_data,
+            'candidates': candidates_data
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync data: {str(e)}'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+
     
 @api_view(['GET'])
 def api_root(request, format=None):
     return Response({
-        'message': 'Welcome to Recos Platform API',
+        'message': 'Welcome to Recos API',
         'endpoints': {
             'register': reverse('register', request=request, format=format),
             'login': reverse('login', request=request, format=format),
@@ -237,7 +265,8 @@ def api_root(request, format=None):
             'odoo-credentials': reverse('add_odoo_credentials', request=request, format=format),
             'odoo-credentials-list': reverse('get_odoo_credentials', request=request, format=format),
             'companies': reverse('get_companies', request=request, format=format),
-            'users': reverse('recruiter_list', request=request, format=format),  # Add this line
+            'users': reverse('recruiter_list', request=request, format=format),  
+            'sync-jobs-for-company':reverse('sync_jobs_for_company', args=[1], request=request, format=format),
         }
     })
 

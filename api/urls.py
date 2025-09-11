@@ -26,5 +26,6 @@ urlpatterns = [
     path('users/', views.RecruiterListView.as_view(),name='recruiter_list'),
     path('forgot-password/', views.forgot_password, name='forgot_password'),
     path('reset-password/', views.reset_password, name='reset_password'),
-    path('verify-reset-code/', views.verify_reset_code, name='verify_reset_code'),  
+    path('verify-reset-code/', views.verify_reset_code, name='verify_reset_code'), 
+    path('sync/all-data/', views.sync_all_data, name='sync_all_data'),
 ]
