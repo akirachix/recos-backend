@@ -48,12 +48,46 @@ class InterviewConversationViewSet(viewsets.ModelViewSet):
     serializer_class = InterviewConversationSerializer
 
 class JobViewSet(viewsets.ModelViewSet):
-    queryset = Job.objects.all()
     serializer_class = JobSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    def get_queryset(self):
+        # Filter jobs by the current recruiter and optionally by company
+        queryset = Job.objects.filter(recruiter=self.request.user)
+        company_id = self.request.query_params.get('company_id', None)
+        if company_id is not None:
+            queryset = queryset.filter(company_id=company_id)
+        return queryset
+    def perform_create(self, serializer):
+        # Ensure job is associated with the current recruiter and company
+        company_id = self.request.data.get('company_id')
+        if company_id:
+            company = Company.objects.get(company_id=company_id, recruiter=self.request.user)
+            serializer.save(recruiter=self.request.user, company=company)
+        else:
+            serializer.save(recruiter=self.request.user)
 
 class CandidateViewSet(viewsets.ModelViewSet):
-    queryset = Candidate.objects.all()
     serializer_class = CandidateSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    def get_queryset(self):
+        # Filter candidates by the current recruiter and optionally by job
+        queryset = Candidate.objects.filter(recruiter=self.request.user)
+        job_id = self.request.query_params.get('job_id', None)
+        if job_id is not None:
+            queryset = queryset.filter(job_id=job_id)
+        return queryset
+    def perform_create(self, serializer):
+        # Ensure candidate is associated with the current recruiter, company, and job
+        job_id = self.request.data.get('job_id')
+        if job_id:
+            job = Job.objects.get(job_id=job_id, recruiter=self.request.user)
+            serializer.save(
+                recruiter=self.request.user,
+                job=job,
+                company=job.company
+            )
+        else:
+            serializer.save(recruiter=self.request.user)
 
 class RecruiterRegistrationView(generics.CreateAPIView):
     queryset = Recruiter.objects.all()
@@ -224,6 +258,62 @@ def get_companies(request):
     serializer = CompanySerializer(companies, many=True)
     return Response(serializer.data)
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_jobs_by_company(request, company_id):
+    try:
+        company = Company.objects.get(company_id=company_id, recruiter=request.user)
+    except Company.DoesNotExist:
+        return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+    jobs = Job.objects.filter(company=company, recruiter=request.user)
+    serializer = JobSerializer(jobs, many=True)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_candidates_by_job(request, job_id):
+    try:
+        job = Job.objects.get(job_id=job_id, recruiter=request.user)
+    except Job.DoesNotExist:
+        return Response({'error': 'Job not found'}, status=status.HTTP_404_NOT_FOUND)
+    candidates = Candidate.objects.filter(job=job, recruiter=request.user)
+    serializer = CandidateSerializer(candidates, many=True)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_jobs_for_company(request, company_id):
+    try:
+        company = Company.objects.get(company_id=company_id, recruiter=request.user)
+    except Company.DoesNotExist:
+        return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        synced_jobs = JobSyncService.sync_jobs_for_company(company)
+        serializer = JobSerializer(synced_jobs, many=True)
+        return Response({
+            'message': f'Successfully synced {len(synced_jobs)} jobs',
+            'jobs': serializer.data
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync jobs: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_candidates_for_job(request, job_id):
+    try:
+        job = Job.objects.get(job_id=job_id, recruiter=request.user)
+    except Job.DoesNotExist:
+        return Response({'error': 'Job not found'}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        synced_candidates = CandidateSyncService.sync_candidates_for_job(job)
+        serializer = CandidateSerializer(synced_candidates, many=True)
+        return Response({
+            'message': f'Successfully synced {len(synced_candidates)} candidates',
+            'candidates': serializer.data
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync candidates: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
@@ -268,8 +358,17 @@ def api_root(request, format=None):
             'users': reverse('recruiter_list', request=request, format=format),  
             'sync-jobs-for-company':reverse('sync_jobs_for_company', args=[1], request=request, format=format),
             'sync-all-data': reverse('sync_all_data', request=request, format=format),
+            'jobs-by-company': reverse('get_jobs_by_company', args=[1], request=request, format=format),
+            'candidates-by-job': reverse('get_candidates_by_job', args=[1], request=request, format=format),
+            'sync-candidates-for-job': reverse('sync_candidates_for_job', args=[1], request=request, format=format),
+
         }
     })
+
+
+
+
+
 
 
 @api_view(['POST'])

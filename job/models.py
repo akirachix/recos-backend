@@ -1,10 +1,13 @@
 from django.db import models
+from companies.models import Company
 
 class Job(models.Model):
     job_id = models.AutoField(primary_key=True)
+    Company=models.ForeignKey(Company, on_delete=models.CASCADE)
     job_title = models.CharField(max_length=100)
     job_description = models.TextField()
     generated_job_summary = models.TextField()
+    state=models.CharField(max_length=50, default=open)
     posted_at = models.DateTimeField(auto_now_add=True)
     expired_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
