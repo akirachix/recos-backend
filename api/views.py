@@ -267,6 +267,7 @@ def api_root(request, format=None):
             'companies': reverse('get_companies', request=request, format=format),
             'users': reverse('recruiter_list', request=request, format=format),  
             'sync-jobs-for-company':reverse('sync_jobs_for_company', args=[1], request=request, format=format),
+            'sync-all-data': reverse('sync_all_data', request=request, format=format),
         }
     })
 
