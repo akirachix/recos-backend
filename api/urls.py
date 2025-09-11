@@ -6,11 +6,12 @@ from . import views
 
 
 router = DefaultRouter()
-router.register(r'interview_conversations', InterviewConversationViewSet)
-router.register(r'jobs', JobViewSet)
-router.register(r'candidates', CandidateViewSet)
-router.register(r'interview', InterviewViewSet)
+router.register(r'interview_conversations', InterviewConversationViewSet, basename='interview_conversation')
+router.register(r'jobs', JobViewSet, basename='job')
+router.register(r'candidates', CandidateViewSet, basename='candidate')
+router.register(r'interview', InterviewViewSet, basename='interview')
 router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
+
 
 
 urlpatterns = [
@@ -31,4 +32,5 @@ urlpatterns = [
     path('jobs/<int:job_id>/candidates/', views.get_candidates_by_job, name='get_candidates_by_job'),
     path('sync/jobs/company/<int:company_id>/', views.sync_jobs_for_company, name='sync_jobs_for_company'),
     path('sync/candidates/job/<int:job_id>/', views.sync_candidates_for_job, name='sync_candidates_for_job'),
+    path('companies/<int:company_id>/jobs/', views.get_jobs_by_company, name='get_jobs_by_company'),
 ]
