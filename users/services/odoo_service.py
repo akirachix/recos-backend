@@ -82,8 +82,56 @@ class OdooService:
             print(f"Odoo API call failed: {str(e)}")
             raise
     
-    def get_user_info(self):
-        return self.call_odoo('res.users', 'read', [[self.uid]])
+    def get_user_companies(self):
+        user_data = self.call_odoo(
+            'res.users', 
+            'read', 
+            [[self.uid]], 
+            {'fields': ['company_ids', 'company_id']}
+        )
+        
+        if not user_data:
+            return []
+        company_ids = user_data[0].get('company_ids', [])
+        if not company_ids:
+            return []
+        return self.call_odoo(
+            'res.company', 
+            'read', 
+            [company_ids], 
+            {'fields': ['name', 'id']}
+        )
     
-    def get_companies(self):
-        return self.call_odoo('res.company', 'search_read', [[]], {'fields': ['name', 'id']})
+    def set_company_context(self, company_id):
+        self.context['allowed_company_ids'] = [company_id]
+        self.call_odoo(
+            'res.users',
+            'write',
+            [[self.uid], {'company_id': company_id}]
+        )
+
+    def get_jobs(self, company_id=None):
+        domain = []
+        if company_id:
+            domain.append(('company_id', '=', company_id))
+        
+        return self.call_odoo(
+            'hr.job', 
+            'search_read', 
+            [domain], 
+            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment']}
+        )
+    
+    def get_candidates(self, job_id=None, company_id=None):
+        domain = []
+        if job_id:
+            domain.append(('job_id', '=', job_id))
+        elif company_id:
+            domain.append(('company_id', '=', company_id))
+        
+        return self.call_odoo(
+            'hr.applicant', 
+            'search_read', 
+            [domain], 
+            {'fields': ['name', 'partner_name', 'email_from', 'stage_id', 'company_id', 'job_id', 'date_open', 'date_last_stage_update']}
+        )
