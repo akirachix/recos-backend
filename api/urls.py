@@ -28,4 +28,5 @@ urlpatterns = [
     path('reset-password/', views.reset_password, name='reset_password'),
     path('verify-reset-code/', views.verify_reset_code, name='verify_reset_code'), 
     path('sync/all-data/', views.sync_all_data, name='sync_all_data'),
+    path('companies/<int:company_id>/jobs/', views.get_jobs_by_company, name='get_jobs_by_company'),
 ]
