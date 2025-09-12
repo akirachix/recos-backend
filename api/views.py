@@ -59,13 +59,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# views.py
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_interview(request):
-    """
-    Create a new interview and automatically create Google Calendar event
-    """
+    
     try:
         serializer = InterviewSerializer(data=request.data)
         if serializer.is_valid():
@@ -110,9 +107,7 @@ def create_interview(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_interview_event(request, interview_id):
-    """
-    Create Google Calendar event for an interview
-    """
+    
     try:
         print(f"Request user type: {type(request.user)}")
         print(f"Request user ID: {request.user.id}")
@@ -150,9 +145,7 @@ def create_interview_event(request, interview_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_interview_analytics(request, interview_id):
-    """
-    Get analytics for a completed interview
-    """
+    
     try:
         interview = Interview.objects.get(id=interview_id, recruiter=request.user.recruiter)
         
@@ -183,7 +176,6 @@ def get_interview_analytics(request, interview_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_candidate_attachments(request, candidate_id):
-    """Get all attachments for a specific candidate (API endpoint)"""
     try:
         candidate = Candidate.objects.get(
             candidate_id=candidate_id,
@@ -210,7 +202,6 @@ def get_candidate_attachments(request, candidate_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def download_candidate_attachment(request, candidate_id, attachment_id):
-    """Download a specific attachment for a candidate"""
     try:
         attachment = CandidateAttachment.objects.get(
             attachment_id=attachment_id,
@@ -244,7 +235,6 @@ def download_candidate_attachment(request, candidate_id, attachment_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_candidate_attachments(request, candidate_id):
-    """Sync attachments for a specific candidate"""
     try:
         candidate = Candidate.objects.get(
             candidate_id=candidate_id,
@@ -396,7 +386,6 @@ class RecruiterListView(generics.ListAPIView):
             return Recruiter.objects.all()
         return Recruiter.objects.filter(id=self.request.user.id)
 
-# API Views
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def login_view(request):
@@ -881,10 +870,8 @@ class AIReportViewSet(viewsets.ModelViewSet):
         y -= 30
 
         p.setFont("Helvetica", 12)
-        #link to candidate name applied
         p.drawString(50, y, f"Candidate Name: Johnny Gait")
         y -= 20
-        #link to job possition applied
         p.drawString(50, y, f"Position Applied: Backend Developer")
         y -= 20
         p.drawString(50, y, f"Skill Match Score: {ai_report.skill_match_score}")
