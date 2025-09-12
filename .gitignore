@@ -9,3 +9,4 @@ db.sqlite3
 credentials.json
 saved_login.pickle
 .env
+token_1.pickle

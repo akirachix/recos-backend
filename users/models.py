@@ -44,7 +44,7 @@ class RecruiterManager(BaseUserManager):
 
 class Recruiter(AbstractUser):
     username = None
-    email = models.EmailField(_('email_address'), unique=True)    
+    email = models.EmailField(_('email_address'), unique=True, blank=False, null=False)
     first_name = models.CharField(_('first name'), max_length=100, blank=False, null=False)
     last_name = models.CharField(_('last name'), max_length=100, blank=False, null=False)
     image = models.ImageField(upload_to='profiles/', null=True, blank=True)
@@ -68,8 +68,6 @@ class Recruiter(AbstractUser):
     def __str__(self):
         return f"Name:{self.first_name} {self.last_name} \n Id:{self.id}"  
  
-
-Recruiter = get_user_model()
 
 class OdooCredentials(models.Model):
     credentials_id = models.AutoField(primary_key=True)
