@@ -28,7 +28,6 @@ uritemplate==4.1.1
 whitenoise==6.7.0
 typing-extensions==4.13.2
 sqlparse==0.5.3
-pyyaml=6.0.2
 httplib2==0.31.0
 requests-oauthlib==2.0.0
 mypy-extensions==1.1.0
@@ -41,6 +40,12 @@ pyasn1-modules==0.4.2
 pyparsing==3.2.3
 rsa==4.9.1
 tomli==2.2.1
+dj-database-url
+drf-yasg==1.21.10
+inflection==0.5.1
+pytz==2025.2
+psycopg==3.2.10
+psycopg2-binary==2.9.10
 
 
 
