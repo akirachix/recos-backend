@@ -1,0 +1,13 @@
+env/
+recosenv/
+
+*.pyc
+__pycache__/
+db.sqlite3
+.env
+staticfiles
+credentials.json
+saved_login.pickle
+.env
+token_1.pickle
+vemv
