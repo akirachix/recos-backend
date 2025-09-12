@@ -1,10 +1,6 @@
-import logging
 from users.models import OdooCredentials
 from users.services.odoo_service import OdooService
 from job.models import Job
-
-logger = logging.getLogger(__name__)
-
 class JobSyncService:
     @staticmethod
     def sync_jobs_for_company(company, odoo_service=None):
@@ -52,19 +48,17 @@ class JobSyncService:
                     try:
                         CandidateSyncService.sync_candidates_for_job(job, odoo_service)
                     except Exception as e:
-                        logger.error(f"Error syncing candidates for job {job.job_title}: {str(e)}")
+                        return f"Error syncing candidates for job {job.job_title}: {str(e)}"
             except ImportError:
-                logger.warning("CandidateSyncService not available - skipping candidate sync")
+                return "CandidateSyncService not available - skipping candidate sync"
         
             JobSyncService._deactivate_removed_jobs(company, odoo_jobs)
             
-            logger.info(f"Synced {len(synced_jobs)} jobs for company {company.company_name}")
             return synced_jobs
         
         
             
         except Exception as e:
-            logger.error(f"Error syncing jobs for company {company.company_name}: {str(e)}")
             raise
      
     

@@ -1,9 +1,7 @@
 import json
 import requests
 from urllib.parse import urljoin
-import logging
 
-logger = logging.getLogger(__name__) 
 
 class OdooService:
     def __init__(self, db_url, db_name, email, api_key):
@@ -97,14 +95,10 @@ class OdooService:
             return result.get('result')
             
         except requests.exceptions.RequestException as e:
-            logger.error(f"Odoo Network Error: {str(e)}")
             raise Exception(f"Network error connecting to Odoo: {str(e)}")
         except json.JSONDecodeError as e:
-            logger.error(f"Odoo JSON Parse Error: {str(e)}")
-            logger.error(f"Response text: {response.text}")
             raise Exception(f"Invalid response from Odoo: {str(e)}")
         except Exception as e:
-            logger.error(f"Odoo API call failed: {str(e)}")
             raise
         
     def get_user_companies(self):
@@ -176,7 +170,6 @@ class OdooService:
                 {'fields': fields}
             )
         except Exception as e:
-            logger.error(f"Odoo API call failed: {str(e)}")
             raise
     
     def get_user_info(self):
@@ -230,6 +223,5 @@ class OdooService:
             return None
             
         except Exception as e:
-            logger.error(f"Failed to get attachment content {attachment_id}: {str(e)}")
             return None
     

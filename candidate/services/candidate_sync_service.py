@@ -1,4 +1,3 @@
-import logging
 from users.models import OdooCredentials
 from users.services.odoo_service import OdooService
 from django.utils.dateparse import parse_datetime
@@ -7,7 +6,6 @@ from candidate.models import Candidate, CandidateAttachment
 from django.core.files.base import ContentFile
 import mimetypes
 import os
-logger = logging.getLogger(__name__)
 
 class CandidateSyncService:
     @staticmethod
@@ -123,14 +121,12 @@ class CandidateSyncService:
         try:
             return parse_datetime(odoo_date_string)
         except (ValueError, TypeError):
-            logger.warning(f"Could not parse date: {odoo_date_string}")
             return None
     
     @staticmethod
     def sync_candidates_for_company(company, odoo_service=None):
         """Sync all candidates for a company (all jobs)"""
         try:
-            logger.info(f"Starting company-wide candidate sync for: {company.company_name}")
             
             if not odoo_service:
                 recruiter = company.recruiter
@@ -152,7 +148,6 @@ class CandidateSyncService:
                     raise Exception("Failed to authenticate with Odoo")
             
             odoo_candidates = odoo_service.get_candidates(company_id=company.odoo_company_id)
-            logger.info(f"Found {len(odoo_candidates)} candidates in Odoo for company {company.company_name}")
             
             synced_count = 0
             for odoo_candidate in odoo_candidates:
@@ -180,13 +175,10 @@ class CandidateSyncService:
                         synced_count += 1
                         
                 except Exception as e:
-                    logger.error(f"Error processing company candidate: {str(e)}")
                     continue
             
-            logger.info(f"Successfully synced {synced_count} candidates for company {company.company_name}")
             
         except Exception as e:
-            logger.error(f"Error syncing candidates for company {company.company_name}: {str(e)}", exc_info=True)
             raise
     
     @staticmethod
@@ -198,17 +190,15 @@ class CandidateSyncService:
                 res_id=candidate.odoo_candidate_id
             )
             
-            logger.info(f"Found {len(attachments)} attachments for candidate {candidate.name}")
             
             for attachment_data in attachments:
                 try:
                     CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
                 except Exception as e:
-                    logger.error(f"Error processing attachment {attachment_data.get('id')}: {str(e)}")
                     continue
             
         except Exception as e:
-            logger.error(f"Error syncing attachments for candidate {candidate.name}: {str(e)}")
+            return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"
 
     @staticmethod
     def _process_single_attachment(candidate, attachment_data, odoo_service):
@@ -217,12 +207,10 @@ class CandidateSyncService:
         attachment_name = attachment_data.get('name', f'attachment_{attachment_id}')
         attachment_type = attachment_data.get('mimetype', 'application/octet-stream')
         
-        # Check if attachment already exists
         if CandidateAttachment.objects.filter(
             candidate=candidate, 
             odoo_attachment_id=attachment_id
         ).exists():
-            logger.debug(f"Attachment {attachment_id} already exists for candidate {candidate.name}")
             return
         
         try:
@@ -254,7 +242,6 @@ class CandidateSyncService:
                     original_filename=original_filename
                 )
                 
-                # Save file content
                 attachment.file.save(file_name, ContentFile(file_content))
                 attachment.save()
                                 
