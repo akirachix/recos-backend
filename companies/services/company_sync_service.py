@@ -1,9 +1,7 @@
-import logging
 from users.models import OdooCredentials
 from users.services.odoo_service import OdooService
 from companies.models import Company
 
-logger = logging.getLogger(__name__)
 
 class CompanySyncService:
     @staticmethod
@@ -21,7 +19,7 @@ class CompanySyncService:
                 db_url=odoo_creds.db_url,
                 db_name=odoo_creds.db_name,
                 email=odoo_creds.email_address,
-                api_key=odoo_creds.get_api_key()  # This decrypts the API key
+                api_key=odoo_creds.get_api_key() 
             )
             
             if not odoo_service.authenticate():
@@ -49,11 +47,9 @@ class CompanySyncService:
                 [company['id'] for company in odoo_companies]
             )
             
-            logger.info(f"Successfully synced {len(synced_companies)} companies for {recruiter.email}")
             return synced_companies
             
         except Exception as e:
-            logger.error(f"Error syncing companies for {recruiter.email}: {str(e)}")
             raise
     
     @staticmethod
@@ -63,9 +59,9 @@ class CompanySyncService:
             from job.services.job_sync_service import JobSyncService
             JobSyncService.sync_jobs_for_company(company, odoo_service)
         except ImportError:
-            logger.warning("JobSyncService not available - skipping job sync")
+            return "JobSyncService not available - skipping job sync"
         except Exception as e:
-            logger.error(f"Error syncing jobs for company {company.company_name}: {str(e)}")
+            return f"Error syncing jobs for company {company.company_name}: {str(e)}"
     
     @staticmethod
     def _deactivate_removed_companies(recruiter, active_odoo_company_ids):
