@@ -16,7 +16,6 @@ router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('', views.api_root, name='api_root'),
     path('register/', views.RecruiterRegistrationView.as_view(), name='register'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
@@ -33,4 +32,12 @@ urlpatterns = [
     path('sync/jobs/company/<int:company_id>/', views.sync_jobs_for_company, name='sync_jobs_for_company'),
     path('sync/candidates/job/<int:job_id>/', views.sync_candidates_for_job, name='sync_candidates_for_job'),
     path('companies/<int:company_id>/jobs/', views.get_jobs_by_company, name='get_jobs_by_company'),
+    path('sync/jobs/user/', views.sync_jobs_for_user, name='sync_jobs_for_user'),
+    path('debug/companies/', views.debug_companies, name='debug_companies'),
+    path('verify/companies/', views.verify_companies, name='verify_companies'),
+    path('sync/companies/', views.sync_companies, name='sync_companies'),
+    path('debug/db-state/', views.debug_db_state, name='debug_db_state'),
+    path('reset/company-sequence/', views.reset_company_sequence, name='reset_company_sequence'),
+    path('sync/jobs/handle-duplicates/', views.sync_jobs_handle_duplicates, name='sync_jobs_handle_duplicates'),
 ]
+

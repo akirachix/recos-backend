@@ -93,14 +93,16 @@ class OdooService:
         
         if not user_data:
             return []
+        
         company_ids = user_data[0].get('company_ids', [])
         if not company_ids:
             return []
+        
         return self.call_odoo(
             'res.company', 
             'read', 
             [company_ids], 
-            {'fields': ['name', 'id']}
+            {'fields': ['name', 'id', 'country_id']}
         )
     
     def set_company_context(self, company_id):
@@ -110,19 +112,21 @@ class OdooService:
             'write',
             [[self.uid], {'company_id': company_id}]
         )
-
-    def get_jobs(self, company_id=None):
+    
+    def get_jobs(self, company_id=None, user_id=None):
         domain = []
         if company_id:
             domain.append(('company_id', '=', company_id))
+        if user_id:
+            domain.append(('user_id', '=', user_id))
         
         return self.call_odoo(
             'hr.job', 
             'search_read', 
             [domain], 
-            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment']}
+            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment', 'user_id']}
         )
-    
+        
     def get_candidates(self, job_id=None, company_id=None):
         domain = []
         if job_id:

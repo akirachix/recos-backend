@@ -81,6 +81,9 @@ class OdooCredentials(models.Model):
     db_url = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('recruiter', 'db_name', 'odoo_user_id')
     
     def __str__(self):
         return f"{self.recruiter.email} - {self.db_name}"

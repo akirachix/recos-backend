@@ -1,6 +1,5 @@
-
 from django.shortcuts import render
-
+from django.contrib.auth.models import Permission
 from rest_framework import viewsets, generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
@@ -52,44 +51,54 @@ class InterviewConversationViewSet(viewsets.ModelViewSet):
 class JobViewSet(viewsets.ModelViewSet):
     serializer_class = JobSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
     def get_queryset(self):
-        # Filter jobs by the current recruiter and optionally by company
-        queryset = Job.objects.filter(recruiter=self.request.user)
+        recruiter = self.request.user
+        print(f"Fetching jobs for recruiter: {recruiter.email}")
+        
+        companies = Company.objects.filter(recruiter=recruiter)
+        print(f"Found {companies.count()} companies for this recruiter")
+        
+        queryset = Job.objects.filter(company__in=companies)
+        print(f"Found {queryset.count()} jobs for these companies")
+        
         company_id = self.request.query_params.get('company_id', None)
         if company_id is not None:
+            print(f"Filtering by company_id: {company_id}")
             queryset = queryset.filter(company_id=company_id)
+            print(f"After filtering, found {queryset.count()} jobs")
+        
         return queryset
-    def perform_create(self, serializer):
-        # Ensure job is associated with the current recruiter and company
-        company_id = self.request.data.get('company_id')
-        if company_id:
-            company = Company.objects.get(company_id=company_id, recruiter=self.request.user)
-            serializer.save(recruiter=self.request.user, company=company)
-        else:
-            serializer.save(recruiter=self.request.user)
-
+    
 class CandidateViewSet(viewsets.ModelViewSet):
     serializer_class = CandidateSerializer
     permission_classes = [permissions.IsAuthenticated]
-    def get_queryset(self):
-        # Filter candidates by the current recruiter and optionally by job
-        queryset = Candidate.objects.filter(recruiter=self.request.user)
+    
+    def get_queryset(self):   
+        recruiter = self.request.user
+        companies = Company.objects.filter(recruiter=recruiter)
+        jobs = Job.objects.filter(company__in=companies)
+        queryset = Candidate.objects.filter(job__in=jobs)
+        
         job_id = self.request.query_params.get('job_id', None)
         if job_id is not None:
             queryset = queryset.filter(job_id=job_id)
+            
         return queryset
+    
     def perform_create(self, serializer):
-        # Ensure candidate is associated with the current recruiter, company, and job
         job_id = self.request.data.get('job_id')
         if job_id:
-            job = Job.objects.get(job_id=job_id, recruiter=self.request.user)
-            serializer.save(
-                recruiter=self.request.user,
-                job=job,
-                company=job.company
-            )
+            try:
+                job = Job.objects.get(job_id=job_id, company__recruiter=self.request.user)
+                serializer.save(
+                    job=job,
+                    company=job.company  
+                )
+            except Job.DoesNotExist:
+                raise serializers.ValidationError("Job not found or doesn't belong to you")
         else:
-            serializer.save(recruiter=self.request.user)
+            raise serializers.ValidationError("job_id is required")
 
 class RecruiterRegistrationView(generics.CreateAPIView):
     queryset = Recruiter.objects.all()
@@ -193,75 +202,6 @@ def logout_view(request):
         return Response({'message': 'Logout successful'})
     return Response({'error': 'You are not logged in'}, status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def add_odoo_credentials(request):
-    if not request.user.is_active:
-        return Response({'error': 'User account is disabled'}, status=status.HTTP_403_FORBIDDEN)
-    
-    db_url = request.data.get('db_url')
-    db_name = request.data.get('db_name')
-    email = request.data.get('email')
-    api_key = request.data.get('api_key')
-    
-    if not all([db_url, db_name, email, api_key]):
-        return Response({'error': 'All fields (db_url, db_name, email, api_key) are required'}, 
-                        status=status.HTTP_400_BAD_REQUEST)
-    
-    odoo_service = OdooService(db_url, db_name, email, api_key)
-    if not odoo_service.authenticate():
-        return Response({'error': 'Invalid Odoo credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-    
-    try:
-        user_info = odoo_service.get_user_info()
-        if not user_info:
-            return Response({'error': 'Failed to retrieve user info from Odoo'}, 
-                            status=status.HTTP_400_BAD_REQUEST)
-        
-        odoo_user_id = user_info[0]['id']
-    except Exception as e:
-        return Response({'error': f'Failed to retrieve user info: {str(e)}'}, 
-                        status=status.HTTP_400_BAD_REQUEST)
-    
-    credentials, created = OdooCredentials.objects.update_or_create(
-        recruiter=request.user,
-        odoo_user_id=odoo_user_id,
-        defaults={
-            'api_key': api_key, 
-            'email_address': email,
-            'db_name': db_name,
-            'db_url': db_url,
-        }
-    )
-    
-    try:
-        companies = odoo_service.get_companies()
-        created_companies = []
-        for company in companies:
-            comp, comp_created = Company.objects.get_or_create(
-                odoo_company_id=company['id'],
-                recruiter=request.user,
-                defaults={
-                    'company_name': company['name'],
-                    'is_active': True,
-                    'created_at': timezone.now(),
-                    'updated_at': timezone.now()
-                }
-            )
-            created_companies.append(comp)
-    except Exception as e:
-        return Response({'error': f'Failed to retrieve companies: {str(e)}'}, 
-                        status=status.HTTP_400_BAD_REQUEST)
-    
-    serializer = OdooCredentialsSerializer(credentials)
-    companies_serializer = CompanySerializer(created_companies, many=True)
-    
-    return Response({
-        'message': 'Odoo credentials added successfully',
-        'credentials': serializer.data,
-        'companies': companies_serializer.data
-    }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
-
 @api_view(['GET'])
 def get_odoo_credentials(request):
     credentials = OdooCredentials.objects.filter(recruiter=request.user)
@@ -270,22 +210,13 @@ def get_odoo_credentials(request):
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
-def get_companies(request):
-    try:
-        companies = Company.objects.filter(recruiter=request.user)
-        serializer = CompanySerializer(companies, many=True)
-        return Response(serializer.data)
-    except Exception as e:
-        return Response({'error': f'Failed to retrieve companies: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
 def get_jobs_by_company(request, company_id):
     try:
         company = Company.objects.get(company_id=company_id, recruiter=request.user)
     except Company.DoesNotExist:
-        return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
-    jobs = Job.objects.filter(company=company, recruiter=request.user)
+        return Response({'error': 'Company not found or access denied'}, status=status.HTTP_404_NOT_FOUND)
+    
+    jobs = Job.objects.filter(company=company)
     serializer = JobSerializer(jobs, many=True)
     return Response(serializer.data)
 
@@ -300,14 +231,22 @@ def get_candidates_by_job(request, job_id):
     serializer = CandidateSerializer(candidates, many=True)
     return Response(serializer.data)
 
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_jobs_for_company(request, company_id):
     try:
-        company = Company.objects.get(company_id=company_id, recruiter=request.user)
+        try:
+            company = Company.objects.get(company_id=company_id, recruiter=request.user)
+        except Company.MultipleObjectsReturned:
+            company = Company.objects.filter(company_id=company_id, recruiter=request.user).first()
+            if not company:
+                return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
     except Company.DoesNotExist:
         return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+    
     try:
+        from job.services.job_sync_service import JobSyncService
         synced_jobs = JobSyncService.sync_jobs_for_company(company)
         serializer = JobSerializer(synced_jobs, many=True)
         return Response({
@@ -317,6 +256,7 @@ def sync_jobs_for_company(request, company_id):
     except Exception as e:
         return Response({'error': f'Failed to sync jobs: {str(e)}'},
                         status=status.HTTP_400_BAD_REQUEST)
+    
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_candidates_for_job(request, job_id):
@@ -360,35 +300,6 @@ def sync_all_data(request):
     except Exception as e:
         return Response({'error': f'Failed to sync data: {str(e)}'}, 
                         status=status.HTTP_400_BAD_REQUEST)
-
-    
-@api_view(['GET'])
-def api_root(request, format=None):
-    return Response({
-        'message': 'Welcome to Recos API',
-        'endpoints': {
-            'register': reverse('register', request=request, format=format),
-            'login': reverse('login', request=request, format=format),
-            'logout': reverse('logout', request=request, format=format),
-            'forgot-password':reverse('forgot_password', request=request, format=format),
-            'verify-odoo': reverse('verify_odoo_account', request=request, format=format),
-            'odoo-credentials': reverse('add_odoo_credentials', request=request, format=format),
-            'odoo-credentials-list': reverse('get_odoo_credentials', request=request, format=format),
-            'companies': reverse('get_companies', request=request, format=format),
-            'users': reverse('recruiter_list', request=request, format=format),  
-            'sync-jobs-for-company':reverse('sync_jobs_for_company', args=[1], request=request, format=format),
-            'sync-all-data': reverse('sync_all_data', request=request, format=format),
-            'jobs-by-company': reverse('get_jobs_by_company', args=[1], request=request, format=format),
-            'candidates-by-job': reverse('get_candidates_by_job', args=[1], request=request, format=format),
-            'sync-candidates-for-job': reverse('sync_candidates_for_job', args=[1], request=request, format=format),
-
-        }
-    })
-
-
-
-
-
 
 
 @api_view(['POST'])
@@ -633,10 +544,8 @@ class AIReportViewSet(viewsets.ModelViewSet):
         y -= 30
 
         p.setFont("Helvetica", 12)
-        #link to candidate name applied
         p.drawString(50, y, f"Candidate Name: Johnny Gait")
         y -= 20
-        #link to job possition applied
         p.drawString(50, y, f"Position Applied: Backend Developer")
         y -= 20
         p.drawString(50, y, f"Skill Match Score: {ai_report.skill_match_score}")
@@ -730,3 +639,378 @@ class InterviewViewSet(viewsets.ModelViewSet):
         interview.save()
         output_serializer = self.get_serializer(interview)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+    
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_jobs_for_user(request):
+    try:
+        from job.services.job_sync_service import JobSyncService
+        synced_jobs = JobSyncService.sync_jobs_for_user(request.user)
+        serializer = JobSerializer(synced_jobs, many=True)
+        return Response({
+            'message': f'Successfully synced {len(synced_jobs)} jobs',
+            'jobs': serializer.data
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync jobs: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+from django.db import connection
+from companies.services.company_sync_service import CompanySyncService
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def debug_companies(request):
+    try:
+        recruiter = request.user
+        print(f"Debugging companies for recruiter: {recruiter.email}")
+        
+        all_companies = Company.objects.all()
+        print(f"Total companies in database: {all_companies.count()}")
+        
+        recruiter_companies = Company.objects.filter(recruiter=recruiter)
+        print(f"Companies for this recruiter: {recruiter_companies.count()}")
+        
+        other_companies = Company.objects.exclude(recruiter=recruiter)
+        print(f"Companies for other recruiters: {other_companies.count()}")
+        
+        data = {
+            'recruiter_email': recruiter.email,
+            'total_companies_in_db': all_companies.count(),
+            'companies_for_recruiter': recruiter_companies.count(),
+            'companies_for_others': other_companies.count(),
+            'companies': []
+        }
+        
+        for company in all_companies:
+            data['companies'].append({
+                'id': company.company_id,
+                'name': company.company_name,
+                'odoo_id': company.odoo_company_id,
+                'recruiter_id': company.recruiter.id,
+                'recruiter_email': company.recruiter.email,
+                'is_current_user': company.recruiter == recruiter
+            })
+        
+        return Response(data)
+    except Exception as e:
+        print(f"Error in debug_companies: {str(e)}")
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def verify_companies(request):
+    try:
+        recruiter = request.user
+        
+        companies = Company.objects.filter(recruiter=recruiter)
+        
+        queries = connection.queries
+        
+        data = {
+            'recruiter': {
+                'id': recruiter.id,
+                'email': recruiter.email
+            },
+            'query_count': len(queries),
+            'last_query': queries[-1]['sql'] if queries else None,
+            'companies_count': companies.count(),
+            'companies': []
+        }
+        
+        for company in companies:
+            data['companies'].append({
+                'id': company.company_id,
+                'name': company.company_name,
+                'recruiter_id': company.recruiter.id,
+                'recruiter_email': company.recruiter.email,
+                'is_current_user': company.recruiter == recruiter
+            })
+        
+        return Response(data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_companies(request):
+    try:
+        synced_companies = CompanySyncService.sync_recruiter_companies(request.user)
+        serializer = CompanySerializer(synced_companies, many=True)
+        return Response({
+            'message': f'Successfully synced {len(synced_companies)} companies',
+            'companies': serializer.data
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync companies: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def debug_db_state(request):
+    try:
+        recruiter = request.user
+        
+        companies = Company.objects.filter(recruiter=recruiter)
+        
+        from django.db import connection
+        with connection.cursor() as cursor:
+            if 'sqlite' in connection.settings_dict['ENGINE']:
+                cursor.execute("SELECT seq FROM sqlite_sequence WHERE name='companies_company'")
+                row = cursor.fetchone()
+                next_pk = row[0] if row else None
+            else:
+                try:
+                    cursor.execute("SELECT last_value FROM companies_company_company_id_seq")
+                    row = cursor.fetchone()
+                    next_pk = row[0] if row else None
+                except:
+                    next_pk = None
+        
+        max_id = companies.aggregate(models.Max('company_id'))['company_id__max']
+        
+        data = {
+            'recruiter': {
+                'id': recruiter.id,
+                'email': recruiter.email
+            },
+            'next_primary_key': next_pk,
+            'max_company_id': max_id,
+            'companies_count': companies.count(),
+            'companies': []
+        }
+        
+        for company in companies:
+            data['companies'].append({
+                'id': company.company_id,
+                'name': company.company_name,
+                'odoo_id': company.odoo_company_id,
+                'created_at': company.created_at
+            })
+        
+        return Response(data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+    
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def reset_company_sequence(request):
+    try:
+        from django.db import connection
+        
+        max_id = Company.objects.aggregate(models.Max('company_id'))['company_id__max'] or 0
+        
+        with connection.cursor() as cursor:
+            if 'sqlite' in connection.settings_dict['ENGINE']:
+                cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", (max_id, 'companies_company'))
+            else:
+                cursor.execute("ALTER SEQUENCE companies_company_company_id_seq RESTART WITH %s", [max_id + 1])
+        
+        return Response({
+            'message': f'Company sequence reset to {max_id + 1}',
+            'max_id': max_id
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+    
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_companies(request):
+    try:
+        recruiter = request.user
+        print(f"Fetching companies for recruiter: {recruiter.email} (ID: {recruiter.id})")
+        
+        companies = Company.objects.filter(recruiter=recruiter)
+        print(f"Found {companies.count()} companies in database for this recruiter")
+        
+        for company in companies:
+            print(f"Company ID: {company.company_id}, Name: {company.company_name}")
+        
+        serializer = CompanySerializer(companies, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(f"Error in get_companies: {str(e)}")
+        return Response({'error': f'Failed to retrieve companies: {str(e)}'}, 
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def add_odoo_credentials(request):
+    if not request.user.is_active:
+        return Response({'error': 'User account is disabled'}, status=status.HTTP_403_FORBIDDEN)
+    
+    db_url = request.data.get('db_url')
+    db_name = request.data.get('db_name')
+    email = request.data.get('email')
+    api_key = request.data.get('api_key')
+    
+    if not all([db_url, db_name, email, api_key]):
+        return Response({'error': 'All fields (db_url, db_name, email, api_key) are required'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    if OdooCredentials.objects.filter(recruiter=request.user, db_name=db_name).exists():
+        return Response({'error': 'Credentials for this database already exist'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    odoo_service = OdooService(db_url, db_name, email, api_key)
+    if not odoo_service.authenticate():
+        return Response({'error': 'Invalid Odoo credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+    
+    try:
+        user_info = odoo_service.get_user_info()
+        if not user_info:
+            return Response({'error': 'Failed to retrieve user info from Odoo'}, 
+                            status=status.HTTP_400_BAD_REQUEST)
+        
+        odoo_user_id = user_info[0]['id']
+    except Exception as e:
+        return Response({'error': f'Failed to retrieve user info: {str(e)}'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    credentials = OdooCredentials.objects.create(
+        recruiter=request.user,
+        odoo_user_id=odoo_user_id,
+        api_key=api_key, 
+        email_address=email,
+        db_name=db_name,
+        db_url=db_url,
+    )
+    
+    try:
+        odoo_companies = odoo_service.get_user_companies()
+        print(f"Found {len(odoo_companies)} companies in Odoo for user {request.user.email}")
+        
+        existing_companies = Company.objects.filter(recruiter=request.user)
+        print(f"Found {existing_companies.count()} existing companies for this recruiter")
+        
+        created_companies = []
+        
+        for odoo_company in odoo_companies:
+            print(f"Processing Odoo company: {odoo_company}")
+            company_name = odoo_company['name']
+            
+            existing_company = existing_companies.filter(company_name=company_name).first()
+            
+            if existing_company:
+                print(f"Found existing company by name: {existing_company.company_name} (ID: {existing_company.company_id})")
+                existing_company.odoo_credentials = credentials
+                existing_company.save()
+                created_companies.append(existing_company)
+            else:
+                print(f"Creating new company: {company_name}")
+                comp = Company.objects.create(
+                    company_name=company_name,
+                    recruiter=request.user,
+                    odoo_credentials=credentials,
+                    is_active=True
+                )
+                print(f"Created new company with ID: {comp.company_id}")
+                created_companies.append(comp)
+                
+    except Exception as e:
+        print(f"Error syncing companies: {str(e)}")
+        return Response({'error': f'Failed to retrieve companies: {str(e)}'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    serializer = OdooCredentialsSerializer(credentials)
+    companies_serializer = CompanySerializer(created_companies, many=True)
+    
+    return Response({
+        'message': 'Odoo credentials added successfully',
+        'credentials': serializer.data,
+        'companies': companies_serializer.data
+    }, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_jobs_handle_duplicates(request):
+    try:
+        from job.services.job_sync_service import JobSyncService
+        
+        recruiter = request.user
+        odoo_creds = OdooCredentials.objects.filter(recruiter=recruiter).last()
+        if not odoo_creds:
+            return Response({'error': 'No Odoo credentials found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        odoo_service = OdooService(
+            db_url=odoo_creds.db_url,
+            db_name=odoo_creds.db_name,
+            email=odoo_creds.email_address,
+            api_key=odoo_creds.get_api_key()
+        )
+        
+        if not odoo_service.authenticate():
+            return Response({'error': 'Failed to authenticate with Odoo'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        odoo_jobs = odoo_service.get_jobs(user_id=odoo_creds.odoo_user_id)
+        synced_jobs = []
+        skipped_jobs = []
+        
+        companies = Company.objects.filter(recruiter=recruiter)
+        
+        company_map = {}
+        for company in companies:
+            if company.company_name not in company_map:
+                company_map[company.company_name] = company
+        
+        duplicate_companies = {}
+        for company in companies:
+            if company.company_name in duplicate_companies:
+                duplicate_companies[company.company_name] += 1
+            else:
+                duplicate_companies[company.company_name] = 1
+        
+        for odoo_job in odoo_jobs:
+            job_company_name = None
+            
+            if odoo_job.get('company_id') and isinstance(odoo_job['company_id'], list):
+                job_company_name = odoo_job['company_id'][1]
+            
+            if not job_company_name:
+                skipped_jobs.append({
+                    'job_title': odoo_job.get('name'),
+                    'reason': 'No company name found'
+                })
+                continue
+            
+            if job_company_name not in company_map:
+                skipped_jobs.append({
+                    'job_title': odoo_job.get('name'),
+                    'company_name': job_company_name,
+                    'reason': 'Company not found in database'
+                })
+                continue
+            
+            company = company_map[job_company_name]
+            
+            is_duplicate = duplicate_companies.get(job_company_name, 0) > 1
+            
+            job, created = Job.objects.update_or_create(
+                company=company,
+                job_title=odoo_job['name'],
+                defaults={
+                    'job_description': odoo_job.get('description', ''),
+                    'state': odoo_job.get('state', 'open'),
+                    'expired_at': timezone.now() + timedelta(days=365)
+                }
+            )
+            
+            synced_jobs.append({
+                'job': job,
+                'created': created,
+                'company_name': job_company_name,
+                'is_duplicate_company': is_duplicate
+            })
+        
+        return Response({
+            'message': f'Successfully synced {len(synced_jobs)} jobs, skipped {len(skipped_jobs)} jobs',
+            'synced_jobs': JobSerializer([item['job'] for item in synced_jobs], many=True).data,
+            'sync_details': synced_jobs,
+            'skipped_jobs': skipped_jobs
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync jobs: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
