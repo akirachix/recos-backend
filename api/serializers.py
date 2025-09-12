@@ -284,14 +284,12 @@ class OdooCredentialsSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Validate Odoo connection before saving"""
-        # Optional: Test Odoo connection with provided credentials
         # This ensures users only save valid credentials
         return attrs
     
     def to_representation(self, instance):
         """Custom representation to hide encrypted API key"""
         representation = super().to_representation(instance)
-        # Don't return the encrypted API key in responses
         representation.pop('api_key', None)
         return representation
 
