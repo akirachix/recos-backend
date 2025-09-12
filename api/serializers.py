@@ -85,7 +85,6 @@ class InterviewSerializer(serializers.ModelSerializer):
         ]
     
     def validate(self, data):
-        """Custom validation for interview data"""
         if self.instance is None and 'scheduled_at' in data:
             from django.utils import timezone
             if data['scheduled_at'] <= timezone.now():

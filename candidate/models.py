@@ -54,7 +54,7 @@ class CandidateAttachment(models.Model):
         return f"{self.name} - {self.candidate.name}"
     
     def get_download_filename(self):
-        """Get filename for download (preserve original extension)"""
+        """Get filename for download"""
         if self.original_filename:
             return self.original_filename
         if self.file and hasattr(self.file, 'name'):
