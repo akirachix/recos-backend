@@ -22,14 +22,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 DEBUG = os.getenv('DEBUG', default=False)
-if isinstance(DEBUG, bool):
-    pass
-else:
-    DEBUG = DEBUG.lower() in ('true', '1', 't')
-if DEBUG:
-    CORS_ALLOWS_ALL_ORIGINS = True
-else:
-    CORS_ALLOWED_ORIGINS=[]
 
 ALLOWED_HOSTS = ["*"]
 
