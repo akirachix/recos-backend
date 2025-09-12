@@ -40,6 +40,7 @@ pyasn1-modules==0.4.2
 pyparsing==3.2.3
 rsa==4.9.1
 tomli==2.2.1
+dj-database-url
 
 
 
