@@ -93,7 +93,7 @@ if not os.getenv("DATABASE_URL"):
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
 
-            
+
             "NAME": BASE_DIR / "db.sqlite3",
         }}
 
@@ -137,9 +137,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 ODOO_API_ENCRYPTION_KEY = os.getenv('ODOO_API_ENCRYPTION_KEY')
-
-if not ODOO_API_ENCRYPTION_KEY or len(ODOO_API_ENCRYPTION_KEY) < 16:
-    raise ValueError("ODOO_API_ENCRYPTION_KEY must be set and be at least 16 characters long")
 
 AUTH_USER_MODEL = 'users.Recruiter'
 
