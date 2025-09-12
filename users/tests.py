@@ -128,7 +128,7 @@ class OdooCredentialsModelTests(TestCase):
         self.assertEqual(credentials.email_address, 'odoo@example.com')
         self.assertEqual(credentials.db_name, 'test_db')
         self.assertEqual(credentials.db_url, 'https://test.odoo.com')
-        self.assertNotEqual(credentials.api_key, 'test_api_key')  # Should be encrypted
+        self.assertNotEqual(credentials.api_key, 'test_api_key')  
 
     @override_settings(ODOO_API_ENCRYPTION_KEY='test_encryption_key_32_bytes')
     def test_api_key_encryption(self):
