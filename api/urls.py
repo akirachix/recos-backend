@@ -16,6 +16,7 @@ router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
 
 urlpatterns = [
     path('', include(router.urls)),
+    
     path('', views.api_root, name='api_root'),
     path('register/', views.RecruiterRegistrationView.as_view(), name='register'),
     path('login/', views.login_view, name='login'),
@@ -33,4 +34,4 @@ urlpatterns = [
     path('sync/jobs/company/<int:company_id>/', views.sync_jobs_for_company, name='sync_jobs_for_company'),
     path('sync/candidates/job/<int:job_id>/', views.sync_candidates_for_job, name='sync_candidates_for_job'),
     path('companies/<int:company_id>/jobs/', views.get_jobs_by_company, name='get_jobs_by_company'),
-]
+] 

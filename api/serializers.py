@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from interview.models import Interview
 from interviewConversation.models import InterviewConversation
-from job.models import  Job
+from job.models import Job
 from candidate.models import Candidate
 from django.contrib.auth import get_user_model
 from users.models import OdooCredentials
@@ -26,24 +26,35 @@ class InterviewSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-
-
 class InterviewConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewConversation
         fields = '__all__'
 
-
 class JobSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
-        fields = '__all__'
+        fields = [
+            'job_id',
+            'odoo_job_id',
+            'job_title',
+            'company',
+            'recruiter',
+            'job_description',
+            'generated_job_summary',
+            'state',
+            'is_active',
+            'posted_at',
+            'expired_at',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['job_id', 'odoo_job_id', 'posted_at', 'created_at', 'updated_at']
 
 class CandidateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Candidate
         fields = '__all__'
-
 
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
@@ -55,12 +66,18 @@ Recruiter = get_user_model()
 
 class RecruiterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
-    
+    # If you want to include jobs for the recruiter, uncomment the next line (and make sure Job has recruiter FK)
+    # jobs = JobSerializer(many=True, read_only=True)
+
     class Meta:
         model = Recruiter
-        fields = ['id', 'first_name', 'last_name', 'email', 'password', 'image', 'created_at', 'updated_at']
+        fields = [
+            'id', 'first_name', 'last_name', 'email', 'password',
+            'image', 'created_at', 'updated_at'
+            # , 'jobs'  # Uncomment if you want to include jobs
+        ]
         extra_kwargs = {'password': {'write_only': True}}
-    
+
     def create(self, validated_data):
         password = validated_data.pop('password')
         user = Recruiter(**validated_data)
@@ -71,14 +88,12 @@ class RecruiterSerializer(serializers.ModelSerializer):
 class OdooCredentialsSerializer(serializers.ModelSerializer):
     class Meta:
         model = OdooCredentials
-        fields = ['credentials_id', 'odoo_user_id', 'email_address', 'db_name', 'db_url', 'created_at', 'updated_at']
+        fields = [
+            'credentials_id', 'odoo_user_id', 'email_address', 'db_name',
+            'db_url', 'created_at', 'updated_at'
+        ]
         read_only_fields = ['credentials_id', 'created_at', 'updated_at']
 
-class CompanySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Company
-        fields = ['company_id', 'company_name', 'created_at', 'updated_at']
-        read_only_fields = ['company_id', 'created_at', 'updated_at']
 class AIReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = AIReport

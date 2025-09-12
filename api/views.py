@@ -43,6 +43,7 @@ from .serializers import (
 )
 from interview.utils import create_google_calendar_event
 from companies.services.company_sync_service import CompanySyncService
+from django.contrib.auth.models import Permission
 
 
 class InterviewConversationViewSet(viewsets.ModelViewSet):
@@ -53,14 +54,12 @@ class JobViewSet(viewsets.ModelViewSet):
     serializer_class = JobSerializer
     permission_classes = [permissions.IsAuthenticated]
     def get_queryset(self):
-        # Filter jobs by the current recruiter and optionally by company
         queryset = Job.objects.filter(recruiter=self.request.user)
         company_id = self.request.query_params.get('company_id', None)
         if company_id is not None:
             queryset = queryset.filter(company_id=company_id)
         return queryset
     def perform_create(self, serializer):
-        # Ensure job is associated with the current recruiter and company
         company_id = self.request.data.get('company_id')
         if company_id:
             company = Company.objects.get(company_id=company_id, recruiter=self.request.user)
