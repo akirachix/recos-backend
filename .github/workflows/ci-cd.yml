@@ -31,6 +31,3 @@ jobs:
       run: |
         python manage.py test
 
-    - name: Run migrations
-      env: ODOO_API_ENCRYPTION_KEY: ${{ secrets.ODOO_API_ENCRYPTION_KEY }}
-      run: python manage.py migrate
