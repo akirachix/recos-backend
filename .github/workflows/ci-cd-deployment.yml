@@ -11,10 +11,12 @@ jobs:
       - name: Set up Python environment
         uses: actions/setup-python@v4
         with:
-          python-version: 3.11
+          python-version: '3.10'
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
+      - name: Create static directory
+        run: mkdir -p static
       - name: Install Heroku CLI
         run: curl https://cli-assets.heroku.com/install.sh | sh
       - name: Login to Heroku
@@ -31,5 +33,5 @@ jobs:
           heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
           heroku_app_name: "recos"
           heroku_email: ${{ secrets.HEROKU_EMAIL }}
-
-
+        env:
+          HD_NODE_VERSION: "16"
