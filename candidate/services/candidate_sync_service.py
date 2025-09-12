@@ -13,12 +13,8 @@ class CandidateSyncService:
     @staticmethod
     def sync_candidates_for_job(job, odoo_service=None):
         """Sync candidates from Odoo for a given job including attachments"""
-        try:
-            logger.info(f"Starting candidate sync for job: {job.job_title} (Odoo Job ID: {job.odoo_job_id})")
-            
-            # Use provided service or create new one
+        try:            
             if not odoo_service:
-                # Get recruiter from job's company
                 recruiter = job.company.recruiter
                 
                 odoo_creds = OdooCredentials.objects.filter(
@@ -38,38 +34,30 @@ class CandidateSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
             
-            # Get candidates for this job from Odoo
             odoo_candidates = odoo_service.get_candidates(job_id=job.odoo_job_id)
-            logger.info(f"Found {len(odoo_candidates)} candidates in Odoo for job {job.job_title}")
             
             synced_candidates = []
             for odoo_candidate in odoo_candidates:
                 try:
                     candidate = CandidateSyncService._process_single_candidate(odoo_candidate, job)
                     
-                    # Sync attachments for this candidate - THIS IS THE METHOD THAT SHOULD EXIST
                     CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
                     
                     synced_candidates.append(candidate)
                 except Exception as e:
-                    logger.error(f"Error processing candidate {odoo_candidate.get('id', 'unknown')}: {str(e)}")
                     continue
             
-            logger.info(f"Successfully synced {len(synced_candidates)} candidates with attachments for job {job.job_title}")
             return synced_candidates
             
         except Exception as e:
-            logger.error(f"Error syncing candidates for job {job.job_title}: {str(e)}", exc_info=True)
             raise
 
     @staticmethod
     def _process_single_candidate(odoo_candidate, job):
         """Process a single candidate from Odoo"""
         
-        # Use partner_name instead of name
         candidate_name = odoo_candidate.get('partner_name', 'Unknown Candidate')
         
-        # Extract stage name from stage_id if available
         stage_data = odoo_candidate.get('stage_id', [False, 'Applied'])
         if isinstance(stage_data, list) and len(stage_data) > 1:
             stage_name = stage_data[1]
@@ -78,14 +66,12 @@ class CandidateSyncService:
         
         state = CandidateSyncService._map_odoo_stage(stage_name)
         
-        # Build candidate data with correct field names
         candidate_data = {
             'name': candidate_name,  
             'email': odoo_candidate.get('email_from', ''),
             'state': state,
         }
         
-        # Only add fields that exist in your model
         if hasattr(Candidate, 'phone'):
             candidate_data['phone'] = odoo_candidate.get('phone', '') or odoo_candidate.get('partner_phone', '')
         
@@ -106,7 +92,6 @@ class CandidateSyncService:
                 odoo_candidate.get('date_last_stage_update')
             )
         
-        # Create or update candidate
         candidate, created = Candidate.objects.update_or_create(
             job=job,
             odoo_candidate_id=odoo_candidate['id'],
@@ -166,14 +151,12 @@ class CandidateSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
             
-            # Get all candidates for the company
             odoo_candidates = odoo_service.get_candidates(company_id=company.odoo_company_id)
             logger.info(f"Found {len(odoo_candidates)} candidates in Odoo for company {company.company_name}")
             
             synced_count = 0
             for odoo_candidate in odoo_candidates:
                 try:
-                    # Find or create the job first
                     job_id_data = odoo_candidate.get('job_id', [False])
                     if isinstance(job_id_data, list) and len(job_id_data) > 0:
                         odoo_job_id = job_id_data[0]
@@ -193,7 +176,6 @@ class CandidateSyncService:
                             }
                         )
                         
-                        # Now sync the candidate
                         CandidateSyncService.sync_candidates_for_job(job, odoo_service)
                         synced_count += 1
                         
@@ -211,7 +193,6 @@ class CandidateSyncService:
     def sync_attachments_for_candidate(candidate, odoo_service):
         """Sync attachments for a single candidate"""
         try:
-            # Get attachments for this candidate from Odoo
             attachments = odoo_service.get_attachments(
                 res_model='hr.applicant',
                 res_id=candidate.odoo_candidate_id
@@ -228,7 +209,6 @@ class CandidateSyncService:
             
         except Exception as e:
             logger.error(f"Error syncing attachments for candidate {candidate.name}: {str(e)}")
-            # Don't raise, continue without attachments
 
     @staticmethod
     def _process_single_attachment(candidate, attachment_data, odoo_service):
@@ -246,31 +226,25 @@ class CandidateSyncService:
             return
         
         try:
-            # Get attachment content with base64 data
             attachment_detail = odoo_service.get_attachment_content(attachment_id)
             
             if attachment_detail and 'datas' in attachment_detail:
-                # Decode base64 data
                 base64_data = attachment_detail['datas']
                 file_content = base64.b64decode(base64_data)
                 
-                # Get original filename - handle missing datas_fname field
                 original_filename = attachment_detail.get('datas_fname', attachment_detail.get('name', f'attachment_{attachment_id}'))
                 
-                # Get proper file extension
                 file_extension = CandidateSyncService._get_file_extension(
                     attachment_detail.get('mimetype'), 
                     original_filename
                 )
                 
-                # Create meaningful filename
                 file_name = CandidateSyncService._generate_filename(
                     attachment_name, 
                     file_extension, 
                     attachment_id
                 )
                 
-                # Create attachment record
                 attachment = CandidateAttachment(
                     candidate=candidate,
                     odoo_attachment_id=attachment_id,
@@ -283,12 +257,9 @@ class CandidateSyncService:
                 # Save file content
                 attachment.file.save(file_name, ContentFile(file_content))
                 attachment.save()
-                
-                logger.info(f"Saved attachment: {attachment_name} ({len(file_content)} bytes) for candidate {candidate.name}")
-                
+                                
             else:
-                logger.warning(f"No content found for attachment {attachment_id}")
-                # Create record with failed status
+
                 attachment = CandidateAttachment(
                     candidate=candidate,
                     odoo_attachment_id=attachment_id,
@@ -296,13 +267,11 @@ class CandidateSyncService:
                     file_type=attachment_type,
                     file_size=0,
                     sync_status='failed',
-                    original_filename=attachment_name  # Use attachment name as fallback
+                    original_filename=attachment_name  
                 )
                 attachment.save()
                 
         except Exception as e:
-            logger.error(f"Failed to process attachment {attachment_id}: {str(e)}")
-            # Create failed attachment record for tracking
             attachment = CandidateAttachment(
                 candidate=candidate,
                 odoo_attachment_id=attachment_id,
@@ -310,7 +279,7 @@ class CandidateSyncService:
                 file_type=attachment_type,
                 file_size=0,
                 sync_status='failed',
-                original_filename=attachment_name  # Use attachment name as fallback
+                original_filename=attachment_name 
             )
             attachment.save()
 
@@ -319,29 +288,24 @@ class CandidateSyncService:
         """Get appropriate file extension from mimetype or filename"""
         import mimetypes
         if original_filename:
-            # Extract extension from original filename
             _, ext = os.path.splitext(original_filename)
             if ext:
                 return ext.lower()
         
         if mimetype:
-            # Get extension from mimetype
             ext = mimetypes.guess_extension(mimetype)
             if ext:
                 return ext.lower()
         
-        # Default extension
         return '.bin'
     
     @staticmethod
     def _generate_filename(attachment_name, file_extension, attachment_id):
         """Generate a safe filename for storage"""
         import re
-        # Clean the attachment name
         clean_name = re.sub(r'[^\w\s-]', '', attachment_name)
         clean_name = re.sub(r'[-\s]+', '-', clean_name)
         
-        # Ensure filename isn't too long
         if len(clean_name) > 50:
             clean_name = clean_name[:50]
         

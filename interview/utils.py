@@ -15,16 +15,13 @@ CREDENTIALS_PATH = 'credentials.json'
 
 class GoogleCalendarService:
     
-    # AI Assistant configuration
     AI_ASSISTANT_EMAIL = getattr(settings, 'AI_ASSISTANT_EMAIL', 'muthonimercylin@gmail.com')
     AI_ASSISTANT_NAME = getattr(settings, 'AI_ASSISTANT_NAME', 'Recos AI Assistant')
     
     @staticmethod
     def get_credentials(user=None):
-        """Get Google credentials for a user"""
         try:
             credentials_path =  'credentials.json'
-            # Use user-specific token file if user is provided
             if user:
                 token_path = f'token_{user.id}.pickle'
             else:
@@ -55,17 +52,12 @@ class GoogleCalendarService:
     
     @staticmethod
     def create_interview_event(interview, send_notifications=True):
-        """
-        Create Google Calendar event for an interview with AI assistant using Google Meet
-        """
         try:
             credentials = GoogleCalendarService.get_credentials(interview.recruiter)
             service = build('calendar', 'v3', credentials=credentials)
             
-            # Calculate end time
             end_time = interview.scheduled_at + timedelta(minutes=interview.duration)
             
-            # Build attendees including AI assistant
             attendees = GoogleCalendarService._build_interview_attendees(interview)
             
             event = {
@@ -108,7 +100,6 @@ class GoogleCalendarService:
                 }
             }
             
-            # Create the event with Google Meet conference
             created_event = service.events().insert(
                 calendarId='primary',
                 body=event,
@@ -116,7 +107,6 @@ class GoogleCalendarService:
                 sendUpdates='all' if send_notifications else 'none'
             ).execute()
             
-            # Extract event details
             event_info = {
                 'event_id': created_event.get('id'),
                 'meet_link': created_event.get('hangoutLink'),
@@ -135,9 +125,7 @@ class GoogleCalendarService:
     
     @staticmethod
     def _build_interview_attendees(interview):
-        """Build attendees list including AI assistant with proper Google Meet permissions"""
         attendees = [
-            # Recruiter (organizer)
             {
                 'email': interview.recruiter.email,
                 'displayName': interview.recruiter.get_full_name(),
@@ -145,7 +133,6 @@ class GoogleCalendarService:
                 'responseStatus': 'accepted'
             },
             
-            # AI Assistant
             {
                 'email': GoogleCalendarService.AI_ASSISTANT_EMAIL,
                 'displayName': GoogleCalendarService.AI_ASSISTANT_NAME,
@@ -154,7 +141,6 @@ class GoogleCalendarService:
                 'comment': 'AI Analysis Assistant - Provides real-time feedback and analysis'
             },
             
-            # Candidate
             {
                 'email': interview.candidate.email,
                 'displayName': interview.candidate.name,
@@ -167,7 +153,6 @@ class GoogleCalendarService:
     
     @staticmethod
     def _build_interview_description(interview):
-        """Build detailed interview description with AI instructions"""
         description = f"""
 **Interview Details**
 Title: {interview.title}
@@ -210,10 +195,8 @@ If you experience any issues joining the meeting, please contact IT support.
     
     @staticmethod
     def _generate_ai_meet_url(event_data, interview):
-        """Generate special join URL for AI assistant with Google Meet parameters"""
         meet_link = event_data.get('hangoutLink', '')
         if meet_link:
-            # Add parameters for AI analysis and interaction capabilities
             params = {
                 'ai_analysis': 'true',
                 'interview_id': str(interview.id),
@@ -230,25 +213,21 @@ If you experience any issues joining the meeting, please contact IT support.
     
     @staticmethod
     def enable_ai_features(event_id, interview):
-        """Enable AI-specific features for Google Meet"""
         try:
             credentials = GoogleCalendarService.get_credentials(interview.recruiter)
             service = build('calendar', 'v3', credentials=credentials)
             
-            # Get current event
             event = service.events().get(
                 calendarId='primary',
                 eventId=event_id
             ).execute()
             
-            # Update with AI-specific parameters for Google Meet
             if 'conferenceData' not in event:
                 event['conferenceData'] = {}
             
             if 'parameters' not in event['conferenceData']:
                 event['conferenceData']['parameters'] = {}
             
-            # Add AI-specific parameters for Google Meet
             event['conferenceData']['parameters'].update({
                 'addOnParameters': {
                     'parameters': {
@@ -278,19 +257,16 @@ If you experience any issues joining the meeting, please contact IT support.
     
     @staticmethod
     def get_meeting_analytics(event_id, interview):
-        """Retrieve meeting analytics from Google Meet"""
         try:
             credentials = GoogleCalendarService.get_credentials(interview.recruiter)
             service = build('calendar', 'v3', credentials=credentials)
             
-            # Get event details including Meet participation data
             event = service.events().get(
                 calendarId='primary',
                 eventId=event_id,
                 fields='conferenceData,attendeesResponseStatus'
             ).execute()
             
-            # This would integrate with our AI model
             return {
                 'meeting_details': {
                     'meet_id': event.get('conferenceData', {}).get('conferenceId'),
@@ -312,7 +288,6 @@ If you experience any issues joining the meeting, please contact IT support.
     
     @staticmethod
     def update_interview_event(interview):
-        """Update an existing Google Calendar event"""
         try:
             if not interview.google_event_id:
                 raise ValueError("No Google event ID associated with this interview")
@@ -320,10 +295,8 @@ If you experience any issues joining the meeting, please contact IT support.
             credentials = GoogleCalendarService.get_credentials(interview.recruiter)
             service = build('calendar', 'v3', credentials=credentials)
             
-            # Calculate end time
             end_time = interview.scheduled_at + timedelta(minutes=interview.duration)
             
-            # Build attendees including AI assistant
             attendees = GoogleCalendarService._build_interview_attendees(interview)
             
             event = {
@@ -356,7 +329,6 @@ If you experience any issues joining the meeting, please contact IT support.
     
     @staticmethod
     def cancel_interview_event(interview):
-        """Cancel a Google Calendar event"""
         try:
             if not interview.google_event_id:
                 raise ValueError("No Google event ID associated with this interview")
@@ -377,8 +349,6 @@ If you experience any issues joining the meeting, please contact IT support.
             logger.error(f"Failed to cancel interview event: {str(e)}")
             raise
 
-# Backward compatibility function
 def create_google_calendar_event(interview):
-    """Legacy function for backward compatibility"""
     result = GoogleCalendarService.create_interview_event(interview)
     return result['event_id'], result['meet_link']

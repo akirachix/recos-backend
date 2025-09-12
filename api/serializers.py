@@ -64,31 +64,16 @@ class InterviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Interview
         fields = [
-            # Primary key
             'id',
-            
-            # Foreign keys (writeable)
             'candidate', 'recruiter',
-            
-            # Read-only related object details
             'candidate_name', 'candidate_email',
             'recruiter_name', 'recruiter_email',
-            
-            # Interview details
             'title', 'description',
             'scheduled_at', 'duration', 'end_time',
             'interview_link', 'required_preparation',
-            
-            # Status
             'status',
-            
-            # Google Calendar integration
             'google_event_id', 'google_calendar_link', 'send_calendar_invite',
-            
-            # Computed properties
             'is_upcoming',
-            
-            # Timestamps
             'created_at', 'updated_at', 'completed_at'
         ]
         read_only_fields = [
@@ -101,7 +86,6 @@ class InterviewSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Custom validation for interview data"""
-        # Check if scheduled_at is in the future for new interviews
         if self.instance is None and 'scheduled_at' in data:
             from django.utils import timezone
             if data['scheduled_at'] <= timezone.now():
@@ -138,7 +122,6 @@ class InterviewCreateSerializer(InterviewSerializer):
         """Additional validation for creation"""
         data = super().validate(data)
         
-        # For new interviews, set default status to 'draft'
         if self.instance is None:
             data['status'] = 'draft'
         
@@ -156,7 +139,6 @@ class InterviewUpdateSerializer(InterviewSerializer):
         """Additional validation for updates"""
         data = super().validate(data)
         
-        # Prevent changing certain fields after interview is scheduled
         if self.instance and self.instance.status != 'draft':
             restricted_fields = ['candidate', 'recruiter']
             for field in restricted_fields:
@@ -284,7 +266,6 @@ class OdooCredentialsSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Validate Odoo connection before saving"""
-        # This ensures users only save valid credentials
         return attrs
     
     def to_representation(self, instance):

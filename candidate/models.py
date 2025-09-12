@@ -57,7 +57,6 @@ class CandidateAttachment(models.Model):
         """Get filename for download (preserve original extension)"""
         if self.original_filename:
             return self.original_filename
-        # Fallback: use the stored file name or generate one
         if self.file and hasattr(self.file, 'name'):
             return os.path.basename(self.file.name)
         return f"{self.name or 'attachment'}_{self.attachment_id}"
