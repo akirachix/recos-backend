@@ -97,15 +97,6 @@ if not os.getenv("DATABASE_URL"):
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-import sys
-if 'test' in sys.argv or 'test_coverage' in sys.argv:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": ":memory:",
-        }
-    }
-
 
 
 AUTH_PASSWORD_VALIDATORS = [
