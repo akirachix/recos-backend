@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'companies',
     "ai_reports",
     "interview",
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
