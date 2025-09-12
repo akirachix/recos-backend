@@ -19,7 +19,7 @@ class Interview(models.Model):
     duration = models.IntegerField(
         default=60, 
         help_text="Duration in minutes",
-        validators=[MinValueValidator(15), MaxValueValidator(480)]  # 15min to 8hrs
+        validators=[MinValueValidator(15), MaxValueValidator(480)] 
     )
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
     interview_link = models.URLField(blank=True, null=True)
@@ -53,7 +53,6 @@ class Interview(models.Model):
         return self.scheduled_at + timedelta(minutes=self.duration)
     
     def save(self, *args, **kwargs):
-        # Auto-update status based on timing
         from django.utils import timezone
         now = timezone.now()
         

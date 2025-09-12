@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 class JobSyncService:
     @staticmethod
     def sync_jobs_for_company(company, odoo_service=None):
-        """Sync jobs from Odoo for a given company"""
         try:
             if not odoo_service:
                 recruiter = company.recruiter
@@ -29,7 +28,6 @@ class JobSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
             
-            # Get jobs for this company from Odoo
             odoo_jobs = odoo_service.get_jobs(company_id=company.odoo_company_id)
             
             synced_jobs = []
@@ -55,11 +53,9 @@ class JobSyncService:
                         CandidateSyncService.sync_candidates_for_job(job, odoo_service)
                     except Exception as e:
                         logger.error(f"Error syncing candidates for job {job.job_title}: {str(e)}")
-                        # Re-raise or continue based on your needs
             except ImportError:
                 logger.warning("CandidateSyncService not available - skipping candidate sync")
         
-            # Deactivate jobs that no longer exist in Odoo
             JobSyncService._deactivate_removed_jobs(company, odoo_jobs)
             
             logger.info(f"Synced {len(synced_jobs)} jobs for company {company.company_name}")
@@ -74,7 +70,6 @@ class JobSyncService:
     
     @staticmethod
     def _map_odoo_state(odoo_state):
-        """Map Odoo state to our state choices"""
         state_mapping = {
             'open': 'open',
             'recruit': 'recruit', 
@@ -86,16 +81,13 @@ class JobSyncService:
     
     @staticmethod
     def _parse_odoo_date(odoo_date_string):
-        """Parse Odoo date string to Python datetime"""
         from django.utils.dateparse import parse_datetime
         return parse_datetime(odoo_date_string)
     
     @staticmethod
     def _deactivate_removed_jobs(company, odoo_jobs):
-        """Mark jobs that are no longer in Odoo as expired/closed"""
         active_odoo_job_ids = [job['id'] for job in odoo_jobs]
         
-        # Close jobs that weren't in the sync
         Job.objects.filter(
             company=company,
             odoo_job_id__isnull=False
