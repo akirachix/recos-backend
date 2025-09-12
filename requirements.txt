@@ -41,6 +41,11 @@ pyparsing==3.2.3
 rsa==4.9.1
 tomli==2.2.1
 dj-database-url
+drf-yasg==1.21.10
+inflection==0.5.1
+pytz==2025.2
+psycopg==3.2.10
+psycopg2-binary==2.9.10
 
 
 
