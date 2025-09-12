@@ -52,7 +52,6 @@ from users.services.odoo_service import OdooService
 from companies.services.company_sync_service import CompanySyncService
 from job.services.job_sync_service import JobSyncService
 from candidate.services.candidate_sync_service import CandidateSyncService
-from interview.services.candidate_interview_service import InterviewService
 from .serializers import CandidateAttachmentSerializer
 
 import logging
@@ -109,9 +108,6 @@ def create_interview(request):
 def create_interview_event(request, interview_id):
     
     try:
-        print(f"Request user type: {type(request.user)}")
-        print(f"Request user ID: {request.user.id}")
-        print(f"Request user email: {request.user.email}")
         interview = Interview.objects.get(id=interview_id, recruiter=request.user)
         
         event_info = GoogleCalendarService.create_interview_event(interview)

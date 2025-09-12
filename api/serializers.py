@@ -105,7 +105,7 @@ class InterviewSerializer(serializers.ModelSerializer):
         """Validate duration field"""
         if value < 15:
             raise serializers.ValidationError("Interview duration must be at least 15 minutes.")
-        if value > 480:  # 8 hours
+        if value > 480:
             raise serializers.ValidationError("Interview duration cannot exceed 8 hours.")
         return value
     
@@ -153,15 +153,13 @@ class InterviewListSerializer(serializers.ModelSerializer):
     candidate_name = serializers.CharField(source='candidate.name', read_only=True)
     job_title = serializers.CharField(source='job.job_title', read_only=True)
     company_name = serializers.CharField(source='company.company_name', read_only=True)
-    interview_type_display = serializers.CharField(source='get_interview_type_display', read_only=True)
     is_upcoming = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = Interview
         fields = [
-            'candidate_id', 'candidate_name', 'job_title', 'company_name',
-            'interview_type', 'interview_type_display', 'scheduled_at',
-            'status', 'result', 'is_upcoming', 'created_at'
+            'candidate_id', 'candidate_name', 'job_title', 'company_name', 'scheduled_at',
+            'status', 'is_upcoming', 'created_at'
         ]
 
 class InterviewCalendarSerializer(serializers.ModelSerializer):
