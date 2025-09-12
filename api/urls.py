@@ -13,7 +13,6 @@ router.register(r'interview', InterviewViewSet, basename='interview')
 router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
 
 
-
 urlpatterns = [
     path('', include(router.urls)),
     path('', views.api_root, name='api_root'),
@@ -33,4 +32,10 @@ urlpatterns = [
     path('sync/jobs/company/<int:company_id>/', views.sync_jobs_for_company, name='sync_jobs_for_company'),
     path('sync/candidates/job/<int:job_id>/', views.sync_candidates_for_job, name='sync_candidates_for_job'),
     path('companies/<int:company_id>/jobs/', views.get_jobs_by_company, name='get_jobs_by_company'),
+    path('candidates/<int:candidate_id>/attachments/', views.get_candidate_attachments, name='get_candidate_attachments'),
+    path('candidates/<int:candidate_id>/attachments/download/<int:attachment_id>/', views.download_candidate_attachment, name='download_candidate_attachment'),
+    path('sync/candidates/<int:candidate_id>/attachments/', views.sync_candidate_attachments, name='sync_candidate_attachments'),
+    path('interviews/create/', views.create_interview, name='create-interview'),
+    path('interviews/<int:interview_id>/create-calendar-event/', views.create_interview_event, name='create-calendar-event'),
+    path('interviews/<int:interview_id>/analytics/', views.get_interview_analytics, name='get-interview-analytics'),
 ]

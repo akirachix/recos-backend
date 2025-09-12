@@ -1,9 +1,10 @@
 from django.db import models
 from django.utils import timezone
+from interviewConversation.models import InterviewConversation
 
 class AIReport(models.Model):
     report_id = models.AutoField(primary_key=True)
-    conversation_id = models.IntegerField()
+    conversation_id = models.ForeignKey(InterviewConversation, on_delete=models.CASCADE)
     skill_match_score = models.DecimalField(
         max_digits=10, 
         decimal_places=2, 
