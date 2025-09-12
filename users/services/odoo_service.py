@@ -1,6 +1,9 @@
 import json
 import requests
 from urllib.parse import urljoin
+import logging
+
+logger = logging.getLogger(__name__) 
 
 class OdooService:
     def __init__(self, db_url, db_name, email, api_key):
@@ -43,7 +46,8 @@ class OdooService:
         except Exception as e:
             print(f"Authentication failed: {str(e)}")
             return False
-    
+
+
     def call_odoo(self, model, method, args=None, kwargs=None):
         if not self.uid:
             if not self.authenticate():
@@ -71,18 +75,45 @@ class OdooService:
         }
         
         try:
-            response = requests.post(endpoint, data=json.dumps(payload), headers=headers)
+            # Add debug logging
+            logger.debug(f"Odoo API Call - Model: {model}, Method: {method}")
+            logger.debug(f"Odoo API Endpoint: {endpoint}")
+            
+            response = requests.post(endpoint, data=json.dumps(payload), headers=headers, timeout=30)
             response.raise_for_status()
             result = response.json()
             
+            # Add detailed error logging
             if 'error' in result:
-                raise Exception(result['error']['message'])
+                error_data = result['error']
+                error_msg = error_data.get('message', 'Unknown Odoo error')
+                error_code = error_data.get('code', 'Unknown code')
+                error_data_str = error_data.get('data', {})
+                
+                logger.error(f"Odoo API Error: {error_msg} (Code: {error_code})")
+                logger.error(f"Odoo Error Data: {error_data_str}")
+                
+                # Check for common Odoo errors
+                if "Access Denied" in error_msg or "permission" in error_msg.lower():
+                    raise Exception(f"Odoo Permission Error: {error_msg}")
+                elif "Missing required" in error_msg:
+                    raise Exception(f"Odoo Validation Error: {error_msg}")
+                else:
+                    raise Exception(f"Odoo Server Error: {error_msg}")
             
-            return result['result']
+            return result.get('result')
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Odoo Network Error: {str(e)}")
+            raise Exception(f"Network error connecting to Odoo: {str(e)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Odoo JSON Parse Error: {str(e)}")
+            logger.error(f"Response text: {response.text}")
+            raise Exception(f"Invalid response from Odoo: {str(e)}")
         except Exception as e:
-            print(f"Odoo API call failed: {str(e)}")
+            logger.error(f"Odoo API call failed: {str(e)}")
             raise
-    
+        
     def get_user_companies(self):
         user_data = self.call_odoo(
             'res.users', 
@@ -130,12 +161,30 @@ class OdooService:
         elif company_id:
             domain.append(('company_id', '=', company_id))
         
-        return self.call_odoo(
-            'hr.applicant', 
-            'search_read', 
-            [domain], 
-            {'fields': ['name', 'partner_name', 'email_from', 'stage_id', 'company_id', 'job_id', 'date_open', 'date_last_stage_update']}
-        )
+        fields = [
+            'id',                    # Applicant ID
+            'partner_name',          # Candidate name 
+            'email_from',            # Email address 
+            'stage_id',              # Application stage
+            'company_id',            # Company
+            'job_id',                # Job position
+            'date_open',             # Application date
+            'date_last_stage_update', # Last stage update date
+            'partner_phone',         # Phone number field that exists
+            'create_date',           # Creation date
+            'department_id',         # Department
+        ]
+        
+        try:
+            return self.call_odoo(
+                'hr.applicant', 
+                'search_read', 
+                [domain], 
+                {'fields': fields}
+            )
+        except Exception as e:
+            logger.error(f"Odoo API call failed: {str(e)}")
+            raise
     
     def get_user_info(self):
         return self.call_odoo(
@@ -153,10 +202,45 @@ class OdooService:
             {'fields': ['id', 'name', 'country_id']}
         )
     
-    def set_company_context(self, company_id):
-        self.context['allowed_company_ids'] = [company_id]
-        self.call_odoo(
-            'res.users',
-            'write',
-            [[self.uid], {'company_id': company_id}]
+    def get_attachments(self, res_model, res_id):
+        """Get attachments for a specific model and record ID"""
+        domain = [
+            ('res_model', '=', res_model),
+            ('res_id', '=', res_id)
+        ]
+        
+        # CORRECT FIELD NAMES for your Odoo version
+        # Remove 'datas_fname' since it doesn't exist
+        fields = [
+            'id', 'name', 'mimetype', 'file_size', 'type', 
+            'res_model', 'res_id', 'create_date', 'datas'
+        ]
+        
+        return self.call_odoo(
+            'ir.attachment',
+            'search_read',
+            [domain],
+            {'fields': fields}
         )
+
+    def get_attachment_content(self, attachment_id):
+        """Get the actual file content with base64 data"""
+        try:
+            # Get attachment details including the base64 encoded data
+            # Use only fields that exist in your Odoo
+            attachment = self.call_odoo(
+                'ir.attachment',
+                'read',
+                [[attachment_id]],
+                {'fields': ['datas', 'name', 'mimetype', 'file_size']}  # Removed datas_fname
+            )
+            
+            if attachment and len(attachment) > 0:
+                return attachment[0]  # Return the entire attachment dict
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to get attachment content {attachment_id}: {str(e)}")
+            return None
+    
