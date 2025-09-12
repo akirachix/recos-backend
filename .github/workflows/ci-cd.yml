@@ -15,11 +15,11 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
-        - 5432:5432
+          - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres" 
-          --health-interval=10s 
-          --health-timeout=5s 
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
           --health-retries=5
     strategy:
       matrix:
@@ -36,8 +36,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     - name: Run Black formatter check
-      run: |
-        black .
+      run: black .
     - name: Run migrations
       env:
         ODOO_API_ENCRYPTION_KEY: ${{ secrets.ODOO_API_ENCRYPTION_KEY }}
