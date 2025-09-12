@@ -1,0 +1,1 @@
+web: gunicorn recos.wsgi --log-file -

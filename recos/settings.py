@@ -30,8 +30,7 @@ if DEBUG:
 else:
     CORS_ALLOWED_ORIGINS=[]
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ["*"]
 
 
 
@@ -64,6 +63,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = "recos.urls"
@@ -85,12 +85,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recos.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
+if not os.getenv("DATABASE_URL"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }}
 
 
 
@@ -121,10 +122,11 @@ USE_I18N = True
 USE_TZ = True
 
 
-
-
-STATIC_URL = "static/"
-
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATIC_URL = '/static/'
+STATICFILES_DIRS = (
+    os.path.join(BASE_DIR, 'static'),
+)
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -146,10 +148,9 @@ REST_FRAMEWORK = {
     ],
 }
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 AUTHENTICATION_BACKENDS = [
     'users.backends.EmailBackend', 
@@ -180,3 +181,5 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@recos.com')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 SITE_NAME = 'Recos'
 PASSWORD_RESET_TIMEOUT = 3600
+
+CORS_ORIGIN_ALLOW_ALL = True
