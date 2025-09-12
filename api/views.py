@@ -1,35 +1,37 @@
-
 from django.shortcuts import render
-
 from rest_framework import viewsets, generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
 from rest_framework.authtoken.models import Token
-from interviewConversation.models import InterviewConversation
-from job.models import Job
-from candidate.models import Candidate
 from django.contrib.auth.tokens import default_token_generator
 from django.template.loader import render_to_string
 from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.utils.encoding import force_bytes, force_str
-from users.models import Recruiter, OdooCredentials
-from users.services.odoo_service import OdooService
-from companies.models import Company
-import random
 from django.utils import timezone
 from datetime import timedelta
-from ai_reports.models import AIReport
 from django.http import HttpResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
+import random
+import os
+import requests
+from django.shortcuts import get_object_or_404
+from django.http import FileResponse, HttpResponseForbidden
+from django.views.generic import ListView, DetailView
 from interviewConversation.models import InterviewConversation
 from job.models import Job
-from candidate.models import Candidate
+from candidate.models import Candidate, CandidateAttachment
 from interview.models import Interview
+from users.models import Recruiter, OdooCredentials
+from companies.models import Company
+from ai_reports.models import AIReport
+from interview.utils import GoogleCalendarService
+from rest_framework.permissions import IsAuthenticated
+
 from .serializers import (
     InterviewConversationSerializer, 
     JobSerializer, 
@@ -39,82 +41,339 @@ from .serializers import (
     OdooCredentialsSerializer, 
     CompanySerializer,
     AIReportSerializer, 
-    AIReportCreateSerializer
+    AIReportCreateSerializer,
+    InterviewCreateSerializer,
+    InterviewListSerializer,
+    InterviewUpdateSerializer,
+    CandidateAttachmentSerializer
 )
-from interview.utils import create_google_calendar_event
-from companies.services.company_sync_service import CompanySyncService
-from django.contrib.auth.models import Permission
 
+from users.services.odoo_service import OdooService
+from companies.services.company_sync_service import CompanySyncService
+from job.services.job_sync_service import JobSyncService
+from candidate.services.candidate_sync_service import CandidateSyncService
+from .serializers import CandidateAttachmentSerializer
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_interview(request):
+    
+    try:
+        serializer = InterviewSerializer(data=request.data)
+        if serializer.is_valid():
+            interview = serializer.save(recruiter=request.user)
+            
+            try:
+                event_info = GoogleCalendarService.create_interview_event(interview)
+                
+                interview.google_event_id = event_info['event_id']
+                interview.interview_link = event_info['meet_link']
+                interview.google_calendar_link = event_info['event_link']
+                interview.save()
+                
+                return Response({
+                    'success': True,
+                    'interview': InterviewSerializer(interview).data,
+                    'calendar_event': {
+                        'event_id': event_info['event_id'],
+                        'meet_link': event_info['meet_link'],
+                        'calendar_link': event_info['event_link'],
+                        'ai_join_url': event_info['ai_join_url']
+                    },
+                    'message': 'Interview and calendar event created successfully'
+                }, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                return Response({
+                    'success': True,
+                    'interview': InterviewSerializer(interview).data,
+                    'warning': f'Interview created but calendar event failed: {str(e)}',
+                    'message': 'Interview created (calendar event failed)'
+                }, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_interview_event(request, interview_id):
+    
+    try:
+        interview = Interview.objects.get(id=interview_id, recruiter=request.user)
+        
+        event_info = GoogleCalendarService.create_interview_event(interview)
+        
+        interview.google_event_id = event_info['event_id']
+        interview.interview_link = event_info['meet_link']
+        interview.google_calendar_link = event_info['event_link']
+        interview.save()
+        
+        return Response({
+            'success': True,
+            'event_id': event_info['event_id'],
+            'meet_link': event_info['meet_link'],
+            'calendar_link': event_info['event_link'],
+            'ai_join_url': event_info['ai_join_url'],
+            'message': 'Google Calendar event created successfully'
+        }, status=status.HTTP_201_CREATED)
+        
+    except Interview.DoesNotExist:
+        return Response({
+            'success': False,
+            'error': 'Interview not found or access denied'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error creating calendar event: {str(e)}")
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_interview_analytics(request, interview_id):
+    
+    try:
+        interview = Interview.objects.get(id=interview_id, recruiter=request.user.recruiter)
+        
+        if not interview.google_event_id:
+            return Response({
+                'success': False,
+                'error': 'No Google event associated with this interview'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        analytics = GoogleCalendarService.get_meeting_analytics(interview.google_event_id, interview)
+        
+        return Response({
+            'success': True,
+            'analytics': analytics
+        }, status=status.HTTP_200_OK)
+        
+    except Interview.DoesNotExist:
+        return Response({
+            'success': False,
+            'error': 'Interview not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_candidate_attachments(request, candidate_id):
+    try:
+        candidate = Candidate.objects.get(
+            candidate_id=candidate_id,
+            job__company__recruiter=request.user
+        )
+        
+        attachments = CandidateAttachment.objects.filter(candidate=candidate)
+        serializer = CandidateAttachmentSerializer(attachments, many=True)
+        
+        return Response({
+            'candidate_id': candidate.candidate_id,
+            'candidate_name': candidate.name,
+            'attachments_count': attachments.count(),
+            'attachments': serializer.data
+        })
+        
+    except Candidate.DoesNotExist:
+        return Response(
+            {'error': 'Candidate not found or access denied'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def download_candidate_attachment(request, candidate_id, attachment_id):
+    try:
+        attachment = CandidateAttachment.objects.get(
+            attachment_id=attachment_id,
+            candidate__candidate_id=candidate_id,
+            candidate__job__company__recruiter=request.user
+        )
+        
+        if attachment.file:
+            if hasattr(attachment, 'get_download_filename'):
+                filename = attachment.get_download_filename()
+            else:
+                filename = f"{attachment.name or 'attachment'}_{attachment_id}"
+                if attachment.file and hasattr(attachment.file, 'name'):
+                    filename = os.path.basename(attachment.file.name)
+            
+            response = FileResponse(attachment.file.open('rb'))
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response['Content-Type'] = attachment.file_type or 'application/octet-stream'
+            return response
+        else:
+            return Response(
+                {'error': 'File not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+    except CandidateAttachment.DoesNotExist:
+        return Response(
+            {'error': 'Attachment not found or access denied'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_candidate_attachments(request, candidate_id):
+    try:
+        candidate = Candidate.objects.get(
+            candidate_id=candidate_id,
+            job__company__recruiter=request.user
+        )
+        
+        odoo_creds = OdooCredentials.objects.filter(
+            recruiter=request.user
+        ).order_by('-created_at').first()
+        
+        if not odoo_creds:
+            return Response(
+                {'error': 'No Odoo credentials found'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        odoo_service = OdooService(
+            db_url=odoo_creds.db_url,
+            db_name=odoo_creds.db_name,
+            email=odoo_creds.email_address,
+            api_key=odoo_creds.get_api_key()
+        )
+        
+        if not odoo_service.authenticate():
+            return Response(
+                {'error': 'Failed to authenticate with Odoo'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        from candidate.services.candidate_sync_service import CandidateSyncService
+        CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
+        
+        attachments = CandidateAttachment.objects.filter(candidate=candidate)
+        serializer = CandidateAttachmentSerializer(attachments, many=True)
+        
+        return Response({
+            'message': f'Synced attachments for candidate {candidate.name}',
+            'attachments_synced': attachments.count(),
+            'attachments': serializer.data
+        })
+        
+    except Candidate.DoesNotExist:
+        return Response(
+            {'error': 'Candidate not found or access denied'}, 
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to sync attachments: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+class InterviewViewSet(viewsets.ModelViewSet):
+    queryset = Interview.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return InterviewListSerializer
+        elif self.action == 'create':
+            return InterviewCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return InterviewUpdateSerializer
+        return InterviewSerializer
+    
+    def perform_create(self, serializer):
+        job_id = self.request.data.get('job')
+        if not job_id:
+            raise serializer.ValidationError({"job": "Job is required"})
+        
+        try:
+            job = Job.objects.get(job_id=job_id, company__recruiter=self.request.user)
+            interview = serializer.save(
+                recruiter=self.request.user,
+                company=job.company,
+                job=job
+            )
+            
+            if interview.send_calendar_invite:
+                InterviewService.create_interview_invites(interview)
+                
+        except Job.DoesNotExist:
+            raise serializer.ValidationError({"job": "Job not found or access denied"})
+    
+    def get_queryset(self):
+        return Interview.objects.filter(recruiter=self.request.user)
 
 class InterviewConversationViewSet(viewsets.ModelViewSet):
     queryset = InterviewConversation.objects.all()
     serializer_class = InterviewConversationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return InterviewConversation.objects.filter(interview__recruiter=self.request.user)
 
 class JobViewSet(viewsets.ModelViewSet):
     serializer_class = JobSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
     def get_queryset(self):
-        queryset = Job.objects.filter(recruiter=self.request.user)
+        queryset = Job.objects.filter(company__recruiter=self.request.user)
         company_id = self.request.query_params.get('company_id', None)
         if company_id is not None:
             queryset = queryset.filter(company_id=company_id)
         return queryset
+    
     def perform_create(self, serializer):
-        company_id = self.request.data.get('company_id')
-        if company_id:
-            company = Company.objects.get(company_id=company_id, recruiter=self.request.user)
-            serializer.save(recruiter=self.request.user, company=company)
-        else:
-            serializer.save(recruiter=self.request.user)
+        raise serializer.ValidationError("Jobs must be synced from Odoo")
 
 class CandidateViewSet(viewsets.ModelViewSet):
     serializer_class = CandidateSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
     def get_queryset(self):
-        # Filter candidates by the current recruiter and optionally by job
-        queryset = Candidate.objects.filter(recruiter=self.request.user)
+        queryset = Candidate.objects.filter(job__company__recruiter=self.request.user)
         job_id = self.request.query_params.get('job_id', None)
         if job_id is not None:
             queryset = queryset.filter(job_id=job_id)
         return queryset
+    
     def perform_create(self, serializer):
-        # Ensure candidate is associated with the current recruiter, company, and job
-        job_id = self.request.data.get('job_id')
-        if job_id:
-            job = Job.objects.get(job_id=job_id, recruiter=self.request.user)
-            serializer.save(
-                recruiter=self.request.user,
-                job=job,
-                company=job.company
-            )
-        else:
-            serializer.save(recruiter=self.request.user)
+        raise serializer.ValidationError("Candidates must be synced from Odoo")
 
 class RecruiterRegistrationView(generics.CreateAPIView):
     queryset = Recruiter.objects.all()
     serializer_class = RecruiterSerializer
     permission_classes = [permissions.AllowAny]
+    
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
+        
         user = Recruiter.objects.get(email=serializer.data['email'])
         token, created = Token.objects.get_or_create(user=user)
-        try:
-            perm = Permission.objects.get(name='add_odoocredentials')
-            user.user_permissions.add(perm)
-            user.save()
-        except Permission.DoesNotExist:
-            pass
+        
         return Response({
             'user': serializer.data,
             'token': token.key
         }, status=status.HTTP_201_CREATED, headers=headers)
-    
 
 class RecruiterListView(generics.ListAPIView):
-    queryset = Recruiter.objects.all()
     serializer_class = RecruiterSerializer
     permission_classes = [permissions.IsAuthenticated]
     
@@ -123,7 +382,6 @@ class RecruiterListView(generics.ListAPIView):
             return Recruiter.objects.all()
         return Recruiter.objects.filter(id=self.request.user.id)
 
-    
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def login_view(request):
@@ -150,10 +408,8 @@ def login_view(request):
     
     return Response({'error': 'Email and password required'}, status=status.HTTP_400_BAD_REQUEST)
 
-
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
-@authentication_classes([])
 def verify_odoo_account(request):
     try:
         db_url = request.data.get('db_url')
@@ -169,17 +425,13 @@ def verify_odoo_account(request):
         if odoo_service.authenticate():
             return Response({'valid': True, 'message': 'Odoo account verified successfully'})
         else:
-            return Response({'valid': False, 'error': 'Invalid Odoo credentials'}, 
-                            status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'valid': False, 'error': 'Invalid Odoo credentials'},  status=status.HTTP_401_UNAUTHORIZED)
     
     except requests.exceptions.ConnectionError:
-        return Response({'valid': False, 'error': 'Could not connect to Odoo instance'}, 
-                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response({'valid': False, 'error': 'Could not connect to Odoo instance'}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     
     except Exception as e:
-        return Response({'valid': False, 'error': f'An error occurred: {str(e)}'}, 
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+        return Response({'valid': False, 'error': f'An error occurred: {str(e)}'},  status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 def logout_view(request):
@@ -204,8 +456,7 @@ def add_odoo_credentials(request):
     api_key = request.data.get('api_key')
     
     if not all([db_url, db_name, email, api_key]):
-        return Response({'error': 'All fields (db_url, db_name, email, api_key) are required'}, 
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'All fields (db_url, db_name, email, api_key) are required'},  status=status.HTTP_400_BAD_REQUEST)
     
     odoo_service = OdooService(db_url, db_name, email, api_key)
     if not odoo_service.authenticate():
@@ -214,13 +465,11 @@ def add_odoo_credentials(request):
     try:
         user_info = odoo_service.get_user_info()
         if not user_info:
-            return Response({'error': 'Failed to retrieve user info from Odoo'}, 
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Failed to retrieve user info from Odoo'}, status=status.HTTP_400_BAD_REQUEST)
         
         odoo_user_id = user_info[0]['id']
     except Exception as e:
-        return Response({'error': f'Failed to retrieve user info: {str(e)}'}, 
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Failed to retrieve user info: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
     
     credentials, created = OdooCredentials.objects.update_or_create(
         recruiter=request.user,
@@ -234,26 +483,12 @@ def add_odoo_credentials(request):
     )
     
     try:
-        companies = odoo_service.get_companies()
-        created_companies = []
-        for company in companies:
-            comp, comp_created = Company.objects.get_or_create(
-                odoo_company_id=company['id'],
-                recruiter=request.user,
-                defaults={
-                    'company_name': company['name'],
-                    'is_active': True,
-                    'created_at': timezone.now(),
-                    'updated_at': timezone.now()
-                }
-            )
-            created_companies.append(comp)
+        synced_companies = CompanySyncService.sync_recruiter_companies(request.user)
+        companies_serializer = CompanySerializer(synced_companies, many=True)
     except Exception as e:
-        return Response({'error': f'Failed to retrieve companies: {str(e)}'}, 
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Failed to sync companies: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
     
     serializer = OdooCredentialsSerializer(credentials)
-    companies_serializer = CompanySerializer(created_companies, many=True)
     
     return Response({
         'message': 'Odoo credentials added successfully',
@@ -262,6 +497,7 @@ def add_odoo_credentials(request):
     }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
 @api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def get_odoo_credentials(request):
     credentials = OdooCredentials.objects.filter(recruiter=request.user)
     serializer = OdooCredentialsSerializer(credentials, many=True)
@@ -284,7 +520,8 @@ def get_jobs_by_company(request, company_id):
         company = Company.objects.get(company_id=company_id, recruiter=request.user)
     except Company.DoesNotExist:
         return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
-    jobs = Job.objects.filter(company=company, recruiter=request.user)
+    
+    jobs = Job.objects.filter(company=company)
     serializer = JobSerializer(jobs, many=True)
     return Response(serializer.data)
 
@@ -292,10 +529,11 @@ def get_jobs_by_company(request, company_id):
 @permission_classes([permissions.IsAuthenticated])
 def get_candidates_by_job(request, job_id):
     try:
-        job = Job.objects.get(job_id=job_id, recruiter=request.user)
+        job = Job.objects.get(job_id=job_id, company__recruiter=request.user)
     except Job.DoesNotExist:
         return Response({'error': 'Job not found'}, status=status.HTTP_404_NOT_FOUND)
-    candidates = Candidate.objects.filter(job=job, recruiter=request.user)
+    
+    candidates = Candidate.objects.filter(job=job)
     serializer = CandidateSerializer(candidates, many=True)
     return Response(serializer.data)
 
@@ -306,6 +544,7 @@ def sync_jobs_for_company(request, company_id):
         company = Company.objects.get(company_id=company_id, recruiter=request.user)
     except Company.DoesNotExist:
         return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+    
     try:
         synced_jobs = JobSyncService.sync_jobs_for_company(company)
         serializer = JobSerializer(synced_jobs, many=True)
@@ -314,15 +553,16 @@ def sync_jobs_for_company(request, company_id):
             'jobs': serializer.data
         })
     except Exception as e:
-        return Response({'error': f'Failed to sync jobs: {str(e)}'},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Failed to sync jobs: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_candidates_for_job(request, job_id):
     try:
-        job = Job.objects.get(job_id=job_id, recruiter=request.user)
+        job = Job.objects.get(job_id=job_id, company__recruiter=request.user)
     except Job.DoesNotExist:
         return Response({'error': 'Job not found'}, status=status.HTTP_404_NOT_FOUND)
+    
     try:
         synced_candidates = CandidateSyncService.sync_candidates_for_job(job)
         serializer = CandidateSerializer(synced_candidates, many=True)
@@ -331,16 +571,18 @@ def sync_candidates_for_job(request, job_id):
             'candidates': serializer.data
         })
     except Exception as e:
-        return Response({'error': f'Failed to sync candidates: {str(e)}'},
-                        status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Failed to sync candidates: {str(e)}'},status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_all_data(request):
     try:
-        synced_companies = CompanySyncService.sync_recruiter_companies(request.user, sync_jobs=True)
+        synced_companies = CompanySyncService.sync_recruiter_companies(request.user)
+        
         all_candidates = []
         for company in synced_companies:
+            JobSyncService.sync_jobs_for_company(company)
+            
             for job in company.jobs.all():
                 try:
                     synced_candidates = CandidateSyncService.sync_candidates_for_job(job)
@@ -357,38 +599,7 @@ def sync_all_data(request):
             'candidates': candidates_data
         })
     except Exception as e:
-        return Response({'error': f'Failed to sync data: {str(e)}'}, 
-                        status=status.HTTP_400_BAD_REQUEST)
-
-    
-@api_view(['GET'])
-def api_root(request, format=None):
-    return Response({
-        'message': 'Welcome to Recos API',
-        'endpoints': {
-            'register': reverse('register', request=request, format=format),
-            'login': reverse('login', request=request, format=format),
-            'logout': reverse('logout', request=request, format=format),
-            'forgot-password':reverse('forgot_password', request=request, format=format),
-            'verify-odoo': reverse('verify_odoo_account', request=request, format=format),
-            'odoo-credentials': reverse('add_odoo_credentials', request=request, format=format),
-            'odoo-credentials-list': reverse('get_odoo_credentials', request=request, format=format),
-            'companies': reverse('get_companies', request=request, format=format),
-            'users': reverse('recruiter_list', request=request, format=format),  
-            'sync-jobs-for-company':reverse('sync_jobs_for_company', args=[1], request=request, format=format),
-            'sync-all-data': reverse('sync_all_data', request=request, format=format),
-            'jobs-by-company': reverse('get_jobs_by_company', args=[1], request=request, format=format),
-            'candidates-by-job': reverse('get_candidates_by_job', args=[1], request=request, format=format),
-            'sync-candidates-for-job': reverse('sync_candidates_for_job', args=[1], request=request, format=format),
-
-        }
-    })
-
-
-
-
-
-
+        return Response({'error': f'Failed to sync data: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -401,8 +612,7 @@ def forgot_password(request):
     try:
         user = Recruiter.objects.get(email=email)
     except Recruiter.DoesNotExist:
-        return Response({'message': 'Password reset code sent if email exists in our system'}, 
-                        status=status.HTTP_200_OK)
+        return Response({'message': 'Password reset code sent if email exists in our system'},  status=status.HTTP_200_OK)
     
     verification_code = ''.join(random.choices('0123456789', k=6))
     
@@ -428,8 +638,7 @@ def forgot_password(request):
         fail_silently=False,
     )
     
-    return Response({'message': 'Password reset code sent.'}, 
-                    status=status.HTTP_200_OK)
+    return Response({'message': 'Password reset code sent.'}, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
@@ -496,6 +705,31 @@ def verify_reset_code(request):
             'valid': False,
             'error': 'Invalid or expired verification code'
         }, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+def api_root(request, format=None):
+    return Response({
+        'message': 'Welcome to Recos API',
+        'endpoints': {
+            'register': reverse('register', request=request, format=format),
+            'login': reverse('login', request=request, format=format),
+            'logout': reverse('logout', request=request, format=format),
+            'forgot-password': reverse('forgot_password', request=request, format=format),
+            'verify-odoo': reverse('verify_odoo_account', request=request, format=format),
+            'odoo-credentials': reverse('add_odoo_credentials', request=request, format=format),
+            'odoo-credentials-list': reverse('get_odoo_credentials', request=request, format=format),
+            'companies': reverse('get_companies', request=request, format=format),
+            'users': reverse('recruiter_list', request=request, format=format),  
+            'sync-jobs-for-company': reverse('sync_jobs_for_company', args=[1], request=request, format=format),
+            'sync-all-data': reverse('sync_all_data', request=request, format=format),
+            'jobs-by-company': reverse('get_jobs_by_company', args=[1], request=request, format=format),
+            'candidates-by-job': reverse('get_candidates_by_job', args=[1], request=request, format=format),
+            'sync-candidates-for-job': reverse('sync_candidates_for_job', args=[1], request=request, format=format),
+            'interviews': reverse('interview-list', request=request, format=format),
+            'interview-conversations': reverse('interviewconversation-list', request=request, format=format),
+        }
+    })
+    
 def draw_wrapped_text(p, text, x, y, max_width, font_name="Helvetica", font_size=12, line_height=16, page_margin=100, page_height=letter[1]):
     from reportlab.pdfbase.pdfmetrics import stringWidth
     words = text.split()
@@ -632,10 +866,8 @@ class AIReportViewSet(viewsets.ModelViewSet):
         y -= 30
 
         p.setFont("Helvetica", 12)
-        #link to candidate name applied
         p.drawString(50, y, f"Candidate Name: Johnny Gait")
         y -= 20
-        #link to job possition applied
         p.drawString(50, y, f"Position Applied: Backend Developer")
         y -= 20
         p.drawString(50, y, f"Skill Match Score: {ai_report.skill_match_score}")
@@ -712,20 +944,3 @@ class AIReportViewSet(viewsets.ModelViewSet):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="ai_report_{ai_report.report_id}.pdf"'
         return response
-
-class InterviewViewSet(viewsets.ModelViewSet):
-    queryset = Interview.objects.all()
-    serializer_class = InterviewSerializer
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        interview = serializer.save()
-
-   
-        event_id, hangout_link = create_google_calendar_event(interview)
-        interview.google_event_id = event_id
-        interview.interview_link = hangout_link
-        interview.save()
-        output_serializer = self.get_serializer(interview)
-        return Response(output_serializer.data, status=status.HTTP_201_CREATED)

@@ -30,7 +30,8 @@ jobs:
     - name: Run tests with coverage
       run: |
         python manage.py test
-
     - name: Run migrations
-      env: ODOO_API_ENCRYPTION_KEY: ${{ secrets.ODOO_API_ENCRYPTION_KEY }}
+      env:
+        ODOO_API_ENCRYPTION_KEY: ${{ secrets.ODOO_API_ENCRYPTION_KEY }}
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
       run: python manage.py migrate
