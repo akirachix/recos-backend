@@ -1,4 +1,5 @@
 import logging
+import json
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -7,54 +8,62 @@ import pickle
 import os
 from django.conf import settings
 from django.utils import timezone
-from dotenv import load_dotenv
-
-load_dotenv()
-
 
 logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-CREDENTIALS_FILE=os.getenv("GOOGLE_CREDENTIALS_FILE")
-
+CREDENTIALS_PATH = 'credentials.json'
 
 class GoogleCalendarService:
-    
     AI_ASSISTANT_EMAIL = getattr(settings, 'AI_ASSISTANT_EMAIL', 'muthonimercylin@gmail.com')
     AI_ASSISTANT_NAME = getattr(settings, 'AI_ASSISTANT_NAME', 'Recos AI Assistant')
-    
+
+    @staticmethod
+    def _create_credentials_file_if_needed():
+        """Create credentials.json from environment variables if it doesn't exist"""
+        if not os.path.exists(CREDENTIALS_PATH):
+            credentials_data = {
+                "installed": {
+                    "client_id": os.environ.get('GOOGLE_CLIENT_ID'),
+                    "project_id": os.environ.get('GOOGLE_PROJECT_ID'),
+                    "auth_uri": os.environ.get('GOOGLE_AUTH_URI'),
+                    "token_uri": os.environ.get('GOOGLE_TOKEN_URI'),
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_secret": os.environ.get('GOOGLE_CLIENT_SECRET'),
+                    "redirect_uris": [os.environ.get('GOOGLE_REDIRECT_URIS')]
+                }
+            }
+            with open(CREDENTIALS_PATH, 'w') as f:
+                json.dump(credentials_data, f, indent=2)
+            logger.info(f"Created {CREDENTIALS_PATH} from environment variables")
     @staticmethod
     def get_credentials(user=None):
         try:
-            CREDENTIALS_FILE
+            GoogleCalendarService._create_credentials_file_if_needed()
             if user:
                 token_path = f'token_{user.id}.pickle'
             else:
                 token_path = 'token.pickle'
-            
             credentials = None
             if os.path.exists(token_path):
                 with open(token_path, 'rb') as token:
                     credentials = pickle.load(token)
-            
             if not credentials or not credentials.valid:
                 if credentials and credentials.expired and credentials.refresh_token:
                     credentials.refresh(Request())
                 else:
-                    if not os.path.exists(CREDENTIALS_FILE):
-                        raise FileNotFoundError(f"Google credentials file not found at {CREDENTIALS_FILE}")
-                    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+                    if not os.path.exists(CREDENTIALS_PATH):
+                        raise FileNotFoundError(f"Google credentials file not found at {CREDENTIALS_PATH}")
+                    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
                     credentials = flow.run_local_server(port=0)
-                
                 with open(token_path, 'wb') as token:
                     pickle.dump(credentials, token)
-            
             return credentials
-            
         except Exception as e:
             logger.error(f"Failed to get Google credentials: {str(e)}")
             raise
-    
+
+
     @staticmethod
     def create_interview_event(interview, send_notifications=True):
         try:
