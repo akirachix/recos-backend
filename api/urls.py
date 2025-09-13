@@ -1,4 +1,3 @@
-
 from rest_framework.routers import DefaultRouter
 from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet
 from django.urls import path,include
