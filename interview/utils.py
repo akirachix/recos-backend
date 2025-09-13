@@ -357,3 +357,4 @@ If you experience any issues joining the meeting, please contact IT support.
 def create_google_calendar_event(interview):
     result = GoogleCalendarService.create_interview_event(interview)
     return result['event_id'], result['meet_link']
+
