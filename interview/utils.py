@@ -14,18 +14,14 @@ SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 def get_credentials_file():
     """
-    Returns a path to the credentials file.
-    If the env variable is the JSON itself, it writes it to /tmp/credentials.json.
+    Returns the path to the credentials file (credentials.json).
     """
-    cred_env = getattr(settings, "GOOGLE_CREDENTIALS_FILE", None)
-    if not cred_env:
+    cred_file = getattr(settings, "GOOGLE_CREDENTIALS_FILE", None)
+    if not cred_file:
         raise Exception("GOOGLE_CREDENTIALS_FILE is not set in settings")
-    if cred_env.strip().startswith('{'):
-        tmp_path = "/tmp/credentials.json"
-        with open(tmp_path, "w") as f:
-            f.write(cred_env)
-        return tmp_path
-    return cred_env
+    if not os.path.exists(cred_file):
+        raise FileNotFoundError(f"Google credentials file not found at {cred_file}")
+    return cred_file
 
 class GoogleCalendarService:
     AI_ASSISTANT_EMAIL = getattr(settings, 'AI_ASSISTANT_EMAIL', 'muthonimercylin@gmail.com')
@@ -33,6 +29,11 @@ class GoogleCalendarService:
 
     @staticmethod
     def get_credentials(user=None):
+        """
+        Returns OAuth2 credentials for the recruiter (user). 
+        The first time, will prompt OAuth2 flow in browser (locally).
+        Stores/loads token in token_{user.id}.pickle.
+        """
         CREDENTIALS_FILE = get_credentials_file()
         try:
             if user:
@@ -46,11 +47,10 @@ class GoogleCalendarService:
                     credentials = pickle.load(token)
 
             if not credentials or not credentials.valid:
-                if credentials and credentials.expired and credentials.refresh_token:
+                if credentials and hasattr(credentials, "expired") and credentials.expired and credentials.refresh_token:
                     credentials.refresh(Request())
                 else:
-                    if not os.path.exists(CREDENTIALS_FILE):
-                        raise FileNotFoundError(f"Google credentials file not found at {CREDENTIALS_FILE}")
+                    # This will open a browser! Must be run locally by the recruiter one time.
                     flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
                     credentials = flow.run_local_server(port=0)
 
@@ -70,7 +70,6 @@ class GoogleCalendarService:
             service = build('calendar', 'v3', credentials=credentials)
 
             end_time = interview.scheduled_at + timedelta(minutes=interview.duration)
-
             attendees = GoogleCalendarService._build_interview_attendees(interview)
 
             event = {
@@ -129,7 +128,6 @@ class GoogleCalendarService:
             }
 
             logger.info(f"Created interview event with AI assistant: {event_info['event_id']}")
-
             return event_info
 
         except Exception as e:
