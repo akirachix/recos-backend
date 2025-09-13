@@ -164,3 +164,9 @@ SITE_NAME = 'Recos'
 PASSWORD_RESET_TIMEOUT = 3600
 
 CORS_ORIGIN_ALLOW_ALL = True
+
+
+
+GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
+AI_ASSISTANT_EMAIL = os.getenv("AI_ASSISTANT_EMAIL", "muthonimercylin@gmail.com")
+AI_ASSISTANT_NAME = os.getenv("AI_ASSISTANT_NAME", "Recos AI Assistant")
