@@ -7,7 +7,6 @@ import os
 from django.conf import settings
 from django.utils import timezone
 
-
 logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
@@ -19,10 +18,10 @@ class GoogleCalendarService:
     @staticmethod
     def get_credentials(user=None):
         """
-        Uses OAuth2 client credentials to get user consent and save tokens for each user.
-        If you want to use a service account, swap this method for service account logic.
+        Handles both file path and raw JSON for credentials.
+        If GOOGLE_CREDENTIALS_PATH is not a file, raise error.
         """
-        CREDENTIALS_FILE = settings.GOOGLE_CREDENTIALS_FILE
+        CREDENTIALS_FILE = settings.GOOGLE_CREDENTIALS_PATH
         try:
             if user:
                 token_path = f'token_{user.id}.pickle'
