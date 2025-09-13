@@ -15,17 +15,14 @@ logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
-# --- Google Credentials Handling for Local & Heroku ---
 GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS_FILE")
 
 if GOOGLE_CREDENTIALS and GOOGLE_CREDENTIALS.strip().startswith('{'):
-    # If the env var is the JSON, write it to a temp file
     creds_path = '/tmp/credentials.json'
     with open(creds_path, 'w') as f:
         f.write(GOOGLE_CREDENTIALS)
     CREDENTIALS_FILE = creds_path
 else:
-    # Otherwise it's a file path as before
     CREDENTIALS_FILE = GOOGLE_CREDENTIALS
 
 class GoogleCalendarService:
