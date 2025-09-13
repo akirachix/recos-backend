@@ -1,4 +1,5 @@
 import logging
+from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from datetime import timedelta
@@ -6,59 +7,64 @@ import pickle
 import os
 from django.conf import settings
 from django.utils import timezone
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
+CREDENTIALS_FILE=os.getenv("GOOGLE_CREDENTIALS_FILE")
+
 
 class GoogleCalendarService:
-    AI_ASSISTANT_EMAIL = settings.AI_ASSISTANT_EMAIL
-    AI_ASSISTANT_NAME = settings.AI_ASSISTANT_NAME
-
+    
+    AI_ASSISTANT_EMAIL = getattr(settings, 'AI_ASSISTANT_EMAIL', 'muthonimercylin@gmail.com')
+    AI_ASSISTANT_NAME = getattr(settings, 'AI_ASSISTANT_NAME', 'Recos AI Assistant')
+    
     @staticmethod
     def get_credentials(user=None):
-        """
-        Handles both file path and raw JSON for credentials.
-        If GOOGLE_CREDENTIALS_PATH is not a file, raise error.
-        """
-        CREDENTIALS_FILE = settings.GOOGLE_CREDENTIALS_PATH
         try:
+            CREDENTIALS_FILE
             if user:
                 token_path = f'token_{user.id}.pickle'
             else:
                 token_path = 'token.pickle'
-
+            
             credentials = None
             if os.path.exists(token_path):
                 with open(token_path, 'rb') as token:
                     credentials = pickle.load(token)
-
+            
             if not credentials or not credentials.valid:
                 if credentials and credentials.expired and credentials.refresh_token:
                     credentials.refresh(Request())
                 else:
-                    from google_auth_oauthlib.flow import InstalledAppFlow
                     if not os.path.exists(CREDENTIALS_FILE):
                         raise FileNotFoundError(f"Google credentials file not found at {CREDENTIALS_FILE}")
                     flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
                     credentials = flow.run_local_server(port=0)
+                
                 with open(token_path, 'wb') as token:
                     pickle.dump(credentials, token)
+            
             return credentials
+            
         except Exception as e:
             logger.error(f"Failed to get Google credentials: {str(e)}")
             raise
-
+    
     @staticmethod
     def create_interview_event(interview, send_notifications=True):
         try:
             credentials = GoogleCalendarService.get_credentials(interview.recruiter)
             service = build('calendar', 'v3', credentials=credentials)
-
+            
             end_time = interview.scheduled_at + timedelta(minutes=interview.duration)
-
+            
             attendees = GoogleCalendarService._build_interview_attendees(interview)
-
+            
             event = {
                 'summary': f"Interview: {interview.candidate.name} - {interview.title}",
                 'description': GoogleCalendarService._build_interview_description(interview),
@@ -98,14 +104,14 @@ class GoogleCalendarService:
                     }
                 }
             }
-
+            
             created_event = service.events().insert(
                 calendarId='primary',
                 body=event,
                 conferenceDataVersion=1,
                 sendUpdates='all' if send_notifications else 'none'
             ).execute()
-
+            
             event_info = {
                 'event_id': created_event.get('id'),
                 'meet_link': created_event.get('hangoutLink'),
@@ -113,15 +119,15 @@ class GoogleCalendarService:
                 'conference_id': created_event.get('conferenceData', {}).get('conferenceId'),
                 'ai_join_url': GoogleCalendarService._generate_ai_meet_url(created_event, interview)
             }
-
+            
             logger.info(f"Created interview event with AI assistant: {event_info['event_id']}")
-
+            
             return event_info
-
+            
         except Exception as e:
             logger.error(f"Failed to create interview event: {str(e)}")
             raise
-
+    
     @staticmethod
     def _build_interview_attendees(interview):
         attendees = [
@@ -131,6 +137,7 @@ class GoogleCalendarService:
                 'organizer': True,
                 'responseStatus': 'accepted'
             },
+            
             {
                 'email': GoogleCalendarService.AI_ASSISTANT_EMAIL,
                 'displayName': GoogleCalendarService.AI_ASSISTANT_NAME,
@@ -138,6 +145,7 @@ class GoogleCalendarService:
                 'optional': False,
                 'comment': 'AI Analysis Assistant - Provides real-time feedback and analysis'
             },
+            
             {
                 'email': interview.candidate.email,
                 'displayName': interview.candidate.name,
@@ -145,8 +153,9 @@ class GoogleCalendarService:
                 'optional': False
             }
         ]
+        
         return attendees
-
+    
     @staticmethod
     def _build_interview_description(interview):
         description = f"""
@@ -188,7 +197,7 @@ If you experience any issues joining the meeting, please contact IT support.
 {interview.required_preparation or 'No specific preparation required.'}
 """
         return description.strip()
-
+    
     @staticmethod
     def _generate_ai_meet_url(event_data, interview):
         meet_link = event_data.get('hangoutLink', '')
@@ -202,10 +211,150 @@ If you experience any issues joining the meeting, please contact IT support.
                 'enable_chat': 'true',
                 'enable_recording': 'true'
             }
+            
             param_string = '&'.join([f"{k}={v}" for k, v in params.items()])
             return f"{meet_link}?{param_string}"
         return meet_link
+    
+    @staticmethod
+    def enable_ai_features(event_id, interview):
+        try:
+            credentials = GoogleCalendarService.get_credentials(interview.recruiter)
+            service = build('calendar', 'v3', credentials=credentials)
+            
+            event = service.events().get(
+                calendarId='primary',
+                eventId=event_id
+            ).execute()
+            
+            if 'conferenceData' not in event:
+                event['conferenceData'] = {}
+            
+            if 'parameters' not in event['conferenceData']:
+                event['conferenceData']['parameters'] = {}
+            
+            event['conferenceData']['parameters'].update({
+                'addOnParameters': {
+                    'parameters': {
+                        'enableAiAssistant': 'true',
+                        'aiAssistantEmail': GoogleCalendarService.AI_ASSISTANT_EMAIL,
+                        'allowScreenShare': 'true',
+                        'allowRecording': 'true',
+                        'enableRealTimeAnalysis': 'true',
+                        'showAiOverlay': 'true'
+                    }
+                }
+            })
+            
+            updated_event = service.events().update(
+                calendarId='primary',
+                eventId=event_id,
+                body=event,
+                conferenceDataVersion=1
+            ).execute()
+            
+            logger.info(f"Enabled AI features for Google Meet event: {event_id}")
+            return updated_event
+            
+        except Exception as e:
+            logger.error(f"Failed to enable AI features: {str(e)}")
+            raise
+    
+    @staticmethod
+    def get_meeting_analytics(event_id, interview):
+        try:
+            credentials = GoogleCalendarService.get_credentials(interview.recruiter)
+            service = build('calendar', 'v3', credentials=credentials)
+            
+            event = service.events().get(
+                calendarId='primary',
+                eventId=event_id,
+                fields='conferenceData,attendeesResponseStatus'
+            ).execute()
+            
+            return {
+                'meeting_details': {
+                    'meet_id': event.get('conferenceData', {}).get('conferenceId'),
+                    'meet_link': event.get('hangoutLink'),
+                    'recording_available': False,
+                    'participants_joined': []
+                },
+                'ai_analysis': {
+                    'conversation_metrics': {},
+                    'sentiment_scores': {},
+                    'skill_assessment': {},
+                    'recommendations': []
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to get meeting analytics: {str(e)}")
+            return None
+    
+    @staticmethod
+    def update_interview_event(interview):
+        try:
+            if not interview.google_event_id:
+                raise ValueError("No Google event ID associated with this interview")
+                
+            credentials = GoogleCalendarService.get_credentials(interview.recruiter)
+            service = build('calendar', 'v3', credentials=credentials)
+            
+            end_time = interview.scheduled_at + timedelta(minutes=interview.duration)
+            
+            attendees = GoogleCalendarService._build_interview_attendees(interview)
+            
+            event = {
+                'summary': f"Interview: {interview.candidate.name} - {interview.title}",
+                'description': GoogleCalendarService._build_interview_description(interview),
+                'start': {
+                    'dateTime': interview.scheduled_at.isoformat(),
+                    'timeZone': str(interview.scheduled_at.tzinfo) if interview.scheduled_at.tzinfo else 'UTC'
+                },
+                'end': {
+                    'dateTime': end_time.isoformat(),
+                    'timeZone': str(end_time.tzinfo) if end_time.tzinfo else 'UTC'
+                },
+                'attendees': attendees
+            }
+            
+            updated_event = service.events().update(
+                calendarId='primary',
+                eventId=interview.google_event_id,
+                body=event,
+                sendUpdates='all'
+            ).execute()
+            
+            logger.info(f"Updated interview event: {interview.google_event_id}")
+            return updated_event
+            
+        except Exception as e:
+            logger.error(f"Failed to update interview event: {str(e)}")
+            raise
+    
+    @staticmethod
+    def cancel_interview_event(interview):
+        try:
+            if not interview.google_event_id:
+                raise ValueError("No Google event ID associated with this interview")
+                
+            credentials = GoogleCalendarService.get_credentials(interview.recruiter)
+            service = build('calendar', 'v3', credentials=credentials)
+            
+            service.events().delete(
+                calendarId='primary',
+                eventId=interview.google_event_id,
+                sendUpdates='all'
+            ).execute()
+            
+            logger.info(f"Cancelled interview event: {interview.google_event_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to cancel interview event: {str(e)}")
+            raise
 
 def create_google_calendar_event(interview):
     result = GoogleCalendarService.create_interview_event(interview)
     return result['event_id'], result['meet_link']
+
