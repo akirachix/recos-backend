@@ -165,8 +165,16 @@ PASSWORD_RESET_TIMEOUT = 3600
 
 CORS_ORIGIN_ALLOW_ALL = True
 
+import json
 
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS_FILE")
 
-GOOGLE_CREDENTIALS_FILE = os.getenv("GOOGLE_CREDENTIALS_FILE", "credentials.json")
+if GOOGLE_CREDENTIALS and GOOGLE_CREDENTIALS.strip().startswith('{'):
+    GOOGLE_CREDENTIALS_PATH = '/tmp/google_credentials.json'
+    with open(GOOGLE_CREDENTIALS_PATH, 'w') as f:
+        f.write(GOOGLE_CREDENTIALS)
+else:
+    GOOGLE_CREDENTIALS_PATH = GOOGLE_CREDENTIALS or 'credentials.json'
+
 AI_ASSISTANT_EMAIL = os.getenv("AI_ASSISTANT_EMAIL", "muthonimercylin@gmail.com")
 AI_ASSISTANT_NAME = os.getenv("AI_ASSISTANT_NAME", "Recos AI Assistant")
