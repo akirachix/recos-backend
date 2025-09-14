@@ -47,7 +47,6 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
         else:
             return "File"
 
-
 class InterviewConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewConversation
@@ -60,7 +59,7 @@ class InterviewSerializer(serializers.ModelSerializer):
     recruiter_email = serializers.CharField(source='recruiter.email', read_only=True)
     is_upcoming = serializers.BooleanField(read_only=True)
     end_time = serializers.DateTimeField(read_only=True)
-    
+
     class Meta:
         model = Interview
         fields = [
@@ -71,16 +70,14 @@ class InterviewSerializer(serializers.ModelSerializer):
             'title', 'description',
             'scheduled_at', 'duration', 'end_time',
             'interview_link', 'required_preparation',
-            'status',
-            'google_event_id', 'google_calendar_link', 'send_calendar_invite',
-            'is_upcoming',
-            'created_at', 'updated_at', 'completed_at'
+            'status', 'google_event_id', 'google_calendar_link', 'send_calendar_invite',
+            'is_upcoming', 'created_at', 'updated_at', 'completed_at'
         ]
         read_only_fields = [
-            'candidate_id', 'candidate_name', 'candidate_email', 
+            'candidate', 'candidate_name', 'candidate_email',
             'recruiter_name', 'recruiter_email',
-            'end_time', 'is_upcoming', 'google_event_id', 
-            'google_calendar_link', 'created_at', 'updated_at', 
+            'end_time', 'is_upcoming', 'google_event_id',
+            'google_calendar_link', 'created_at', 'updated_at',
             'completed_at'
         ]
     
