@@ -174,7 +174,7 @@ class InterviewCalendarSerializer(serializers.ModelSerializer):
     class Meta:
         model = Interview
         fields = [
-            'id', 'title', 'start', 'end', 'candidate_name', 
+            'interview_id', 'title', 'start', 'end', 'candidate_name', 
             'job_title', 'interview_type', 'status', 'interview_link'
         ]
     
