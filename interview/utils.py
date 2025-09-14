@@ -58,8 +58,8 @@ class GoogleCalendarService:
         flow = Flow.from_client_config(
             cls.get_oauth_client_config(),
             scopes=SCOPES,
-            redirect_uri=cls.get_redirect_uri(request)
         )
+        flow.redirect_uri = cls.get_redirect_uri(request)
         auth_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true',
