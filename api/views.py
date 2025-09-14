@@ -67,7 +67,7 @@ def create_interview(request):
         if serializer.is_valid():
             interview = serializer.save(recruiter=request.user)
             try:
-                event_info = GoogleCalendarService.create_interview_event(interview)
+                event_info = GoogleCalendarService.create_interview_event(request, interview)
                 interview.google_event_id = event_info['event_id']
                 interview.interview_link = event_info['meet_link']
                 interview.google_calendar_link = event_info['event_link']
@@ -85,8 +85,7 @@ def create_interview(request):
                 }, status=status.HTTP_201_CREATED)
             except Exception as e:
                 error_str = str(e)
-                match = re.search(r'(https://accounts\.google\.com/o/oauth2/[^\s]+)', error_str)
-                auth_url = match.group(1) if match else None
+                auth_url = GoogleCalendarService.get_authorization_url(request, request.user)
                 return Response({
                     'success': True,
                     'interview': InterviewSerializer(interview).data,
