@@ -61,20 +61,16 @@ logger = logging.getLogger(__name__)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_interview(request):
-    
     try:
         serializer = InterviewSerializer(data=request.data)
         if serializer.is_valid():
             interview = serializer.save(recruiter=request.user)
-            
             try:
                 event_info = GoogleCalendarService.create_interview_event(interview)
-                
                 interview.google_event_id = event_info['event_id']
                 interview.interview_link = event_info['meet_link']
                 interview.google_calendar_link = event_info['event_link']
                 interview.save()
-                
                 return Response({
                     'success': True,
                     'interview': InterviewSerializer(interview).data,
@@ -82,11 +78,10 @@ def create_interview(request):
                         'event_id': event_info['event_id'],
                         'meet_link': event_info['meet_link'],
                         'calendar_link': event_info['event_link'],
-                        'ai_join_url': event_info['ai_join_url']
+                        'ai_join_url': event_info.get('ai_join_url')
                     },
                     'message': 'Interview and calendar event created successfully'
                 }, status=status.HTTP_201_CREATED)
-                
             except Exception as e:
                 return Response({
                     'success': True,
@@ -94,9 +89,7 @@ def create_interview(request):
                     'warning': f'Interview created but calendar event failed: {str(e)}',
                     'message': 'Interview created (calendar event failed)'
                 }, status=status.HTTP_201_CREATED)
-        
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
     except Exception as e:
         return Response({
             'success': False,
@@ -106,26 +99,21 @@ def create_interview(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_interview_event(request, interview_id):
-    
     try:
-        interview = Interview.objects.get(id=interview_id, recruiter=request.user)
-        
+        interview = Interview.objects.get(interview_id=interview_id, recruiter=request.user)
         event_info = GoogleCalendarService.create_interview_event(interview)
-        
         interview.google_event_id = event_info['event_id']
         interview.interview_link = event_info['meet_link']
         interview.google_calendar_link = event_info['event_link']
         interview.save()
-        
         return Response({
             'success': True,
             'event_id': event_info['event_id'],
             'meet_link': event_info['meet_link'],
             'calendar_link': event_info['event_link'],
-            'ai_join_url': event_info['ai_join_url'],
+            'ai_join_url': event_info.get('ai_join_url'),
             'message': 'Google Calendar event created successfully'
         }, status=status.HTTP_201_CREATED)
-        
     except Interview.DoesNotExist:
         return Response({
             'success': False,
@@ -141,23 +129,18 @@ def create_interview_event(request, interview_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_interview_analytics(request, interview_id):
-    
     try:
-        interview = Interview.objects.get(id=interview_id, recruiter=request.user.recruiter)
-        
+        interview = Interview.objects.get(interview_id=interview_id, recruiter=request.user.recruiter)
         if not interview.google_event_id:
             return Response({
                 'success': False,
                 'error': 'No Google event associated with this interview'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
         analytics = GoogleCalendarService.get_meeting_analytics(interview.google_event_id, interview)
-        
         return Response({
             'success': True,
             'analytics': analytics
         }, status=status.HTTP_200_OK)
-        
     except Interview.DoesNotExist:
         return Response({
             'success': False,
