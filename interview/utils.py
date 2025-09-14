@@ -28,74 +28,119 @@ class GoogleCalendarService:
 
     @classmethod
     def get_oauth_client_config(cls):
+        """Get OAuth client configuration - always use web flow for consistency"""
         if cls.is_production():
-            return {
-                "web": {
-                    "client_id": os.environ['GOOGLE_CLIENT_ID'],
-                    "project_id": os.environ['GOOGLE_PROJECT_ID'],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_secret": os.environ['GOOGLE_CLIENT_SECRET'],
-                    "redirect_uris": [os.environ.get('GOOGLE_REDIRECT_URI')],
-                    "javascript_origins": [os.environ.get('SITE_DOMAIN')],
-                }
-            }
+            redirect_uri = os.environ.get('GOOGLE_REDIRECT_URI', 'https://recos-662b3d74caf2.herokuapp.com/auth/google/callback/')
         else:
-            cred_path = os.path.join(settings.BASE_DIR, "credentials.json")
-            with open(cred_path) as f:
-                return json.load(f)
+            redirect_uri = 'http://localhost:8000/auth/google/callback/'
+        
+        return {
+            "web": {
+                "client_id": os.environ['GOOGLE_CLIENT_ID'],
+                "project_id": os.environ['GOOGLE_PROJECT_ID'],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "client_secret": os.environ['GOOGLE_CLIENT_SECRET'],
+                "redirect_uris": [redirect_uri],
+                "javascript_origins": [os.environ.get('SITE_DOMAIN', 'https://recos-662b3d74caf2.herokuapp.com')],
+            }
+        }
 
     @classmethod
     def get_redirect_uri(cls, request):
+        """Get the correct redirect URI for current environment"""
         if cls.is_production():
-            return os.environ.get('GOOGLE_REDIRECT_URI')
+            return os.environ.get('GOOGLE_REDIRECT_URI', 'https://recos-662b3d74caf2.herokuapp.com/auth/google/callback/')
         else:
             return request.build_absolute_uri(reverse('google_auth_callback'))
-
     @classmethod
     def get_authorization_url(cls, request, user):
-        flow = Flow.from_client_config(
-            cls.get_oauth_client_config(),
-            scopes=SCOPES,
-        )
-        flow.redirect_uri = cls.get_redirect_uri(request)
-        auth_url, state = flow.authorization_url(
-            access_type='offline',
-            include_granted_scopes='true',
-            prompt='consent'
-        )
-        request.session['google_oauth_state'] = state
-        request.session['google_oauth_user_id'] = user.id
-        return auth_url
+        """Generate authorization URL for OAuth flow"""
+        try:
+            client_config = cls.get_oauth_client_config()
+            redirect_uri = cls.get_redirect_uri(request)
+            
+            flow = Flow.from_client_config(
+                client_config,
+                scopes=SCOPES,
+                redirect_uri=redirect_uri
+            )
+            
+            auth_url, state = flow.authorization_url(
+                access_type='offline',
+                include_granted_scopes='true',
+                prompt='consent'
+            )
+            
+            request.session['google_oauth_state'] = state
+            request.session['google_oauth_user_id'] = user.id
+            request.session['google_oauth_redirect_uri'] = redirect_uri
+            
+            return auth_url
+            
+        except Exception as e:
+            logger.error(f"Failed to generate authorization URL: {str(e)}")
+            raise
 
     @classmethod
-    def exchange_code_for_token(cls, request, code):
-        state = request.session.get('google_oauth_state')
-        user_id = request.session.get('google_oauth_user_id')
-        if not state or not user_id:
-            raise RuntimeError("Invalid OAuth session")
-        flow = Flow.from_client_config(
-            cls.get_oauth_client_config(),
-            scopes=SCOPES,
-            redirect_uri=cls.get_redirect_uri(request),
-            state=state
-        )
-        flow.fetch_token(code=code)
-        credentials = flow.credentials
-        credentials_dict = {
-            'token': credentials.token,
-            'refresh_token': credentials.refresh_token,
-            'token_uri': credentials.token_uri,
-            'client_id': credentials.client_id,
-            'client_secret': credentials.client_secret,
-            'scopes': credentials.scopes,
-            'expiry': credentials.expiry.isoformat() if credentials.expiry else None
-        }
-        request.session[f'google_credentials_{user_id}'] = credentials_dict
-        request.session.pop('google_oauth_state', None)
-        request.session.pop('google_oauth_user_id', None)
-        return credentials
+    def exchange_code_for_token(cls, request):
+        """Exchange authorization code for tokens"""
+        try:
+            code = request.GET.get('code')
+            state = request.GET.get('state')
+            stored_state = request.session.get('google_oauth_state')
+            user_id = request.session.get('google_oauth_user_id')
+            redirect_uri = request.session.get('google_oauth_redirect_uri')
+            
+            if not code:
+                raise RuntimeError("No authorization code provided")
+            
+            if not state or state != stored_state:
+                raise RuntimeError("Invalid state parameter")
+            
+            if not user_id:
+                raise RuntimeError("No user ID in session")
+            
+            if not redirect_uri:
+                raise RuntimeError("No redirect URI in session")
+            
+            client_config = cls.get_oauth_client_config()
+            
+            flow = Flow.from_client_config(
+                client_config,
+                scopes=SCOPES,
+                redirect_uri=redirect_uri,
+                state=state
+            )
+            
+            flow.fetch_token(code=code)
+            credentials = flow.credentials
+            
+            # Convert to serializable dict
+            credentials_dict = {
+                'token': credentials.token,
+                'refresh_token': credentials.refresh_token,
+                'token_uri': credentials.token_uri,
+                'client_id': credentials.client_id,
+                'client_secret': credentials.client_secret,
+                'scopes': credentials.scopes,
+                'expiry': credentials.expiry.isoformat() if credentials.expiry else None
+            }
+            
+            # Store credentials in session
+            request.session[f'google_credentials_{user_id}'] = credentials_dict
+            
+            # Clean up session
+            request.session.pop('google_oauth_state', None)
+            request.session.pop('google_oauth_user_id', None)
+            request.session.pop('google_oauth_redirect_uri', None)
+            
+            return credentials
+            
+        except Exception as e:
+            logger.error(f"Failed to exchange code for token: {str(e)}")
+            raise
 
     @staticmethod
     def _create_credentials_file_if_needed():
@@ -116,42 +161,79 @@ class GoogleCalendarService:
             logger.info(f"Created {CREDENTIALS_PATH} from environment variables")
 
     @classmethod
-    def get_credentials(cls, user=None):
+    def get_credentials_from_session(cls, request, user_id):
+        """Get credentials from session storage"""
+        creds_dict = request.session.get(f'google_credentials_{user_id}')
+        if not creds_dict:
+            return None
+        
         try:
-            cls._create_credentials_file_if_needed()
-            if user:
-                token_path = f'token_{user.id}.pickle'
-            else:
-                token_path = 'token.pickle'
+            return Credentials(
+                token=creds_dict['token'],
+                refresh_token=creds_dict['refresh_token'],
+                token_uri=creds_dict['token_uri'],
+                client_id=creds_dict['client_id'],
+                client_secret=creds_dict['client_secret'],
+                scopes=creds_dict['scopes']
+            )
+        except Exception as e:
+            logger.error(f"Failed to create credentials from session: {str(e)}")
+            return None
 
-            credentials = None
-            if os.path.exists(token_path):
-                with open(token_path, 'rb') as token:
-                    credentials = pickle.load(token)
-
-            if not credentials or not credentials.valid:
-                if credentials and credentials.expired and credentials.refresh_token:
+    @classmethod
+    def get_credentials(cls, request, user):
+        """Get credentials - uses session for production, local files for development"""
+        try:
+            if cls.is_production():
+                credentials = cls.get_credentials_from_session(request, user.id)
+                
+                if not credentials:
+                    auth_url = cls.get_authorization_url(request, user)
+                    raise RuntimeError(f"Google authentication required. Please visit: {auth_url}")
+                
+                if credentials.expired and credentials.refresh_token:
                     credentials.refresh(Request())
-                else:
-                    if not os.path.exists(CREDENTIALS_PATH):
-                        raise FileNotFoundError(f"Google credentials file not found at {CREDENTIALS_PATH}")
-
-                    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-
-                    if cls.is_production():
-                        auth_url, _ = flow.authorization_url(prompt='consent')
-                        raise RuntimeError(f"Manual authentication required. Please visit: {auth_url}")
+                    creds_dict = {
+                        'token': credentials.token,
+                        'refresh_token': credentials.refresh_token,
+                        'token_uri': credentials.token_uri,
+                        'client_id': credentials.client_id,
+                        'client_secret': credentials.client_secret,
+                        'scopes': credentials.scopes,
+                        'expiry': credentials.expiry.isoformat() if credentials.expiry else None
+                    }
+                    request.session[f'google_credentials_{user.id}'] = creds_dict
+                
+                return credentials
+            else:
+                cls._create_credentials_file_if_needed()
+                
+                token_path = f'token_{user.id}.pickle'
+                
+                credentials = None
+                if os.path.exists(token_path):
+                    with open(token_path, 'rb') as token:
+                        credentials = pickle.load(token)
+                
+                if not credentials or not credentials.valid:
+                    if credentials and credentials.expired and credentials.refresh_token:
+                        credentials.refresh(Request())
                     else:
+                        if not os.path.exists(CREDENTIALS_PATH):
+                            raise FileNotFoundError(f"Google credentials file not found at {CREDENTIALS_PATH}")
+
+                        flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
                         credentials = flow.run_local_server(port=0)
 
-                with open(token_path, 'wb') as token:
-                    pickle.dump(credentials, token)
+                    with open(token_path, 'wb') as token:
+                        pickle.dump(credentials, token)
 
-            return credentials
+                return credentials
+                
         except Exception as e:
             logger.error(f"Failed to get Google credentials: {str(e)}")
             raise
-
+        
     @classmethod
     def create_interview_event(cls, interview, send_notifications=True):
         try:
