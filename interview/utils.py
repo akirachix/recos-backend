@@ -304,26 +304,42 @@ class GoogleCalendarService:
 
     @staticmethod
     def _build_interview_attendees(interview):
-        attendees = [
-            {
-                'email': interview.recruiter.email,
+        """Build attendees list with email validation"""
+        attendees = []
+        
+        if interview.recruiter and interview.recruiter.email:
+            attendees.append({
+                'email': interview.recruiter.email.strip().lower(),
                 'displayName': interview.recruiter.get_full_name(),
+                'organizer': True,
                 'responseStatus': 'accepted'
-            },
-            {
-                'email': GoogleCalendarService.AI_ASSISTANT_EMAIL,
+            })
+        else:
+            logger.warning(f"Missing recruiter email for interview {interview.interview_id}")
+        
+        ai_email = GoogleCalendarService.AI_ASSISTANT_EMAIL.strip().lower()
+        if ai_email and '@' in ai_email:
+            attendees.append({
+                'email': ai_email,
                 'displayName': GoogleCalendarService.AI_ASSISTANT_NAME,
                 'responseStatus': 'accepted',
                 'optional': False,
                 'comment': 'AI Analysis Assistant - Provides real-time feedback and analysis'
-            },
-            {
-                'email': interview.candidate.email,
+            })
+        else:
+            logger.error(f"Invalid AI assistant email: {ai_email}")
+        
+        if interview.candidate and interview.candidate.email:
+            attendees.append({
+                'email': interview.candidate.email.strip().lower(),
                 'displayName': interview.candidate.name,
                 'responseStatus': 'needsAction',
                 'optional': False
-            }
-        ]
+            })
+        else:
+            logger.warning(f"Missing candidate email for interview {interview.interview_id}")
+        
+        logger.info(f"Built attendees: {attendees}")
         return attendees
 
     @staticmethod
