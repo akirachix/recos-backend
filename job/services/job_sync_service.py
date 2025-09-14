@@ -24,7 +24,7 @@ class JobSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
             
-            odoo_jobs = odoo_service.get_jobs(company_id=company.odoo_company_id)
+            odoo_jobs = odoo_service.get_jobs(company_id=company.company_id)
             
             synced_jobs = []
             for odoo_job in odoo_jobs:
