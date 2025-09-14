@@ -11,22 +11,30 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
-CREDENTIALS_FILE=os.getenv("GOOGLE_CREDENTIALS_FILE")
 
+# --- Google Credentials Handling for Local & Heroku ---
+GOOGLE_CREDENTIALS = os.getenv("GOOGLE_CREDENTIALS_FILE")
+
+if GOOGLE_CREDENTIALS and GOOGLE_CREDENTIALS.strip().startswith('{'):
+    # If the env var is the JSON, write it to a temp file
+    creds_path = '/tmp/credentials.json'
+    with open(creds_path, 'w') as f:
+        f.write(GOOGLE_CREDENTIALS)
+    CREDENTIALS_FILE = creds_path
+else:
+    # Otherwise it's a file path as before
+    CREDENTIALS_FILE = GOOGLE_CREDENTIALS
 
 class GoogleCalendarService:
-    
     AI_ASSISTANT_EMAIL = getattr(settings, 'AI_ASSISTANT_EMAIL', 'muthonimercylin@gmail.com')
     AI_ASSISTANT_NAME = getattr(settings, 'AI_ASSISTANT_NAME', 'Recos AI Assistant')
     
     @staticmethod
     def get_credentials(user=None):
         try:
-            CREDENTIALS_FILE
             if user:
                 token_path = f'token_{user.id}.pickle'
             else:
@@ -357,4 +365,3 @@ If you experience any issues joining the meeting, please contact IT support.
 def create_google_calendar_event(interview):
     result = GoogleCalendarService.create_interview_event(interview)
     return result['event_id'], result['meet_link']
-
