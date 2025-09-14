@@ -19,6 +19,7 @@ from io import BytesIO
 import random
 import os
 import requests
+import re
 from django.shortcuts import get_object_or_404
 from django.http import FileResponse, HttpResponseForbidden
 from django.views.generic import ListView, DetailView
@@ -52,19 +53,11 @@ from users.services.odoo_service import OdooService
 from companies.services.company_sync_service import CompanySyncService
 from job.services.job_sync_service import JobSyncService
 from candidate.services.candidate_sync_service import CandidateSyncService
-from interview.utils import GoogleCalendarService
 from .serializers import CandidateAttachmentSerializer
-from django.http import JsonResponse
-from django.views import View
 
 import logging
 
 logger = logging.getLogger(__name__)
-
-class GoogleAuthStartView(View):
-    def get(self, request):
-        auth_url = GoogleCalendarService.get_authorization_url(request, request.user)
-        return JsonResponse({'auth_url': auth_url})
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -91,10 +84,14 @@ def create_interview(request):
                     'message': 'Interview and calendar event created successfully'
                 }, status=status.HTTP_201_CREATED)
             except Exception as e:
+                error_str = str(e)
+                match = re.search(r'(https://accounts\.google\.com/o/oauth2/[^\s]+)', error_str)
+                auth_url = match.group(1) if match else None
                 return Response({
                     'success': True,
                     'interview': InterviewSerializer(interview).data,
-                    'warning': f'Interview created but calendar event failed: {str(e)}',
+                    'warning': f'Interview created but calendar event failed: {error_str}',
+                    **({'auth_url': auth_url} if auth_url else {}),
                     'message': 'Interview created (calendar event failed)'
                 }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
