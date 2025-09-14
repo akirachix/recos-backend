@@ -83,7 +83,7 @@ class GoogleCalendarService:
         )
         flow.fetch_token(code=code)
         credentials = flow.credentials
-        creds_dict = {
+        credentials_dict = {
             'token': credentials.token,
             'refresh_token': credentials.refresh_token,
             'token_uri': credentials.token_uri,
@@ -92,7 +92,7 @@ class GoogleCalendarService:
             'scopes': credentials.scopes,
             'expiry': credentials.expiry.isoformat() if credentials.expiry else None
         }
-        request.session[f'google_credentials_{user_id}'] = creds_dict
+        request.session[f'google_credentials_{user_id}'] = credentials_dict
         request.session.pop('google_oauth_state', None)
         request.session.pop('google_oauth_user_id', None)
         return credentials
