@@ -88,7 +88,7 @@ class GoogleCalendarService:
                 'attendees': attendees,
                 'conferenceData': {
                     'createRequest': {
-                        'requestId': f"interview_{interview.id}_{int(timezone.now().timestamp())}",
+                        'requestId': f"interview_{interview.interview_id}_{int(timezone.now().timestamp())}",
                         'conferenceSolutionKey': {'type': 'hangoutsMeet'},
                     }
                 },
@@ -106,7 +106,7 @@ class GoogleCalendarService:
                 'visibility': 'private',
                 'extendedProperties': {
                     'private': {
-                        'interviewId': str(interview.id),
+                        'interviewId': str(interview.interview_id),
                         'candidateId': str(interview.candidate.candidate_id),
                         'aiAnalysisEnabled': 'true',
                         'aiAssistantEmail': GoogleCalendarService.AI_ASSISTANT_EMAIL
@@ -213,7 +213,7 @@ If you experience any issues joining the meeting, please contact IT support.
         if meet_link:
             params = {
                 'ai_analysis': 'true',
-                'interview_id': str(interview.id),
+                'interview_id': str(interview.interview_id),
                 'candidate_id': str(interview.candidate.candidate_id),
                 'assistant_email': GoogleCalendarService.AI_ASSISTANT_EMAIL,
                 'enable_screen_share': 'true',
