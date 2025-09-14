@@ -74,6 +74,7 @@ class InterviewSerializer(serializers.ModelSerializer):
             'is_upcoming', 'created_at', 'updated_at', 'completed_at'
         ]
         read_only_fields = [
+            'candidate_name', 'candidate_email',
             'recruiter_name', 'recruiter_email',
             'end_time', 'is_upcoming', 'google_event_id',
             'google_calendar_link', 'created_at', 'updated_at',
@@ -110,17 +111,33 @@ class InterviewCreateSerializer(InterviewSerializer):
     
     class Meta(InterviewSerializer.Meta):
         read_only_fields = InterviewSerializer.Meta.read_only_fields + [
-            'status', 'result'
+            'status', 'result'  
         ]
     
     def validate(self, data):
         """Additional validation for creation"""
         data = super().validate(data)
         
+        if self.instance is None and 'candidate' not in data:
+            raise serializers.ValidationError({
+                'candidate': 'This field is required when creating an interview.'
+            })
+        
+        if self.instance is None and 'recruiter' not in data:
+            raise serializers.ValidationError({
+                'recruiter': 'This field is required when creating an interview.'
+            })
+        
         if self.instance is None:
             data['status'] = 'draft'
         
         return data
+    
+    def create(self, validated_data):
+        if 'recruiter' not in validated_data:
+            validated_data['recruiter'] = self.context['request'].user
+        
+        return super().create(validated_data)
 
 class InterviewUpdateSerializer(InterviewSerializer):
     """Serializer specifically for updating interviews"""
