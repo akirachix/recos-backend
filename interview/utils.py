@@ -354,7 +354,7 @@ Status: {interview.get_status_display()}
 Participants
 - Recruiter: {interview.recruiter.get_full_name()} ({interview.recruiter.email})
 - Candidate: {interview.candidate.name}
-- AI Assistant: {GoogleCalendarService.AI_ASSISTANT_NAME} (Analysis & Recording)
+- AI Assistant: {GoogleCalendarService.AI_ASSISTANT_NAME} 
 
 AI Assistant Features
 - Real-time conversation analysis
