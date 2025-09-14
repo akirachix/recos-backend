@@ -37,6 +37,4 @@ urlpatterns = [
     path('interviews/create/', views.create_interview, name='create-interview'),
     path('interviews/<int:interview_id>/create-calendar-event/', views.create_interview_event, name='create-calendar-event'),
     path('interviews/<int:interview_id>/analytics/', views.get_interview_analytics, name='get-interview-analytics'),
-    path('google/auth/start/', GoogleAuthStartView.as_view(), name='google_auth_start'),
-
 ]
