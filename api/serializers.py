@@ -74,7 +74,6 @@ class InterviewSerializer(serializers.ModelSerializer):
             'is_upcoming', 'created_at', 'updated_at', 'completed_at'
         ]
         read_only_fields = [
-            'candidate', 'candidate_name', 'candidate_email',
             'recruiter_name', 'recruiter_email',
             'end_time', 'is_upcoming', 'google_event_id',
             'google_calendar_link', 'created_at', 'updated_at',
@@ -111,7 +110,7 @@ class InterviewCreateSerializer(InterviewSerializer):
     
     class Meta(InterviewSerializer.Meta):
         read_only_fields = InterviewSerializer.Meta.read_only_fields + [
-            'status', 'result', 'google_event_id', 'google_calendar_link'
+            'status', 'result'
         ]
     
     def validate(self, data):
