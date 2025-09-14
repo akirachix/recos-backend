@@ -52,11 +52,19 @@ from users.services.odoo_service import OdooService
 from companies.services.company_sync_service import CompanySyncService
 from job.services.job_sync_service import JobSyncService
 from candidate.services.candidate_sync_service import CandidateSyncService
+from interview.utils import GoogleCalendarService
 from .serializers import CandidateAttachmentSerializer
+from django.http import JsonResponse
+from django.views import View
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+class GoogleAuthStartView(View):
+    def get(self, request):
+        auth_url = GoogleCalendarService.get_authorization_url(request, request.user)
+        return JsonResponse({'auth_url': auth_url})
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
