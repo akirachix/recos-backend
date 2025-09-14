@@ -235,9 +235,9 @@ class GoogleCalendarService:
             raise
         
     @classmethod
-    def create_interview_event(cls, interview, send_notifications=True):
+    def create_interview_event(cls, request, interview, send_notifications=True):
         try:
-            credentials = cls.get_credentials(interview.recruiter)
+            credentials = cls.get_credentials(request, interview.recruiter)
             service = build('calendar', 'v3', credentials=credentials)
 
             end_time = interview.scheduled_at + timedelta(minutes=interview.duration)
