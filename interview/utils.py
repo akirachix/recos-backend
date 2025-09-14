@@ -19,7 +19,7 @@ CREDENTIALS_PATH = os.path.join(settings.BASE_DIR, 'credentials.json')
 
 class GoogleCalendarService:
 
-    AI_ASSISTANT_EMAIL = getattr(settings, 'AI_ASSISTANT_EMAIL', 'muthonimercylin@gmail.com')
+    AI_ASSISTANT_EMAIL = getattr(settings, 'AI_ASSISTANT_EMAIL', 'linmercymuthoni@gmail.com')
     AI_ASSISTANT_NAME = getattr(settings, 'AI_ASSISTANT_NAME', 'Recos AI Assistant')
 
     @staticmethod
