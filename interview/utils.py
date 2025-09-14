@@ -117,7 +117,6 @@ class GoogleCalendarService:
             flow.fetch_token(code=code)
             credentials = flow.credentials
             
-            # Convert to serializable dict
             credentials_dict = {
                 'token': credentials.token,
                 'refresh_token': credentials.refresh_token,
@@ -128,10 +127,8 @@ class GoogleCalendarService:
                 'expiry': credentials.expiry.isoformat() if credentials.expiry else None
             }
             
-            # Store credentials in session
             request.session[f'google_credentials_{user_id}'] = credentials_dict
             
-            # Clean up session
             request.session.pop('google_oauth_state', None)
             request.session.pop('google_oauth_user_id', None)
             request.session.pop('google_oauth_redirect_uri', None)
