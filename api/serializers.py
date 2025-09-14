@@ -285,23 +285,22 @@ class OdooCredentialsSerializer(serializers.ModelSerializer):
         return representation
 
 class CompanySerializer(serializers.ModelSerializer):
+    recruiter_email = serializers.CharField(source='recruiter.email', read_only=True)
+    recruiter_id = serializers.IntegerField(source='recruiter.id', read_only=True)
     class Meta:
         model = Company
-        fields = ['company_id', 'company_name', 'created_at']
-        read_only_fields = ['company_id', 'created_at']
-
-    def validate_company_name(self, value):
-        """Ensure company name is unique for this recruiter"""
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            if Company.objects.filter(
-                recruiter=request.user, 
-                company_name__iexact=value
-            ).exists():
-                raise serializers.ValidationError(
-                    "You already have a company with this name."
-                )
-        return value
+        fields = [
+            'company_id',
+            'company_name',
+            'recruiter',
+            'recruiter_email',
+            'recruiter_id',
+            'odoo_credentials',
+            'is_active',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['recruiter', 'created_at', 'updated_at']
 
 class AIReportSerializer(serializers.ModelSerializer):
     class Meta:
