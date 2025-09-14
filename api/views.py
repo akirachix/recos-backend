@@ -518,59 +518,194 @@ def logout_view(request):
         logout(request)
         return Response({'message': 'Logout successful'})
     return Response({'error': 'You are not logged in'}, status=status.HTTP_400_BAD_REQUEST)
-
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def verify_companies(request):
+    try:
+        recruiter = request.user
+        companies = Company.objects.filter(recruiter=recruiter)
+        queries = connection.queries
+        data = {
+            'recruiter': {
+                'id': recruiter.id,
+                'email': recruiter.email
+            },
+            'query_count': len(queries),
+            'last_query': queries[-1]['sql'] if queries else None,
+            'companies_count': companies.count(),
+            'companies': []
+        }
+        for company in companies:
+            data['companies'].append({
+                'id': company.company_id,
+                'name': company.company_name,
+                'recruiter_id': company.recruiter.id,
+                'recruiter_email': company.recruiter.email,
+                'is_current_user': company.recruiter == recruiter
+            })
+        return Response(data)
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_companies(request):
+    try:
+        synced_companies = CompanySyncService.sync_recruiter_companies(request.user)
+        serializer = CompanySerializer(synced_companies, many=True)
+        return Response({
+            'message': f'Successfully synced {len(synced_companies)} companies',
+            'companies': serializer.data
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync companies: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def reset_company_sequence(request):
+    try:
+        from django.db import connection
+        max_id = Company.objects.aggregate(models.Max('company_id'))['company_id__max'] or 0
+        with connection.cursor() as cursor:
+            if 'sqlite' in connection.settings_dict['ENGINE']:
+                cursor.execute("UPDATE sqlite_sequence SET seq = ? WHERE name = ?", (max_id, 'companies_company'))
+            else:
+                cursor.execute("ALTER SEQUENCE companies_company_company_id_seq RESTART WITH %s", [max_id + 1])
+        return Response({
+            'message': f'Company sequence reset to {max_id + 1}',
+            'max_id': max_id
+        })
+    except Exception as e:
+        return Response({'error': str(e)}, status=500)
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_companies(request):
+    try:
+        recruiter = request.user
+        print(f"Fetching companies for recruiter: {recruiter.email} (ID: {recruiter.id})")
+        companies = Company.objects.filter(recruiter=recruiter)
+        print(f"Found {companies.count()} companies in database for this recruiter")
+        for company in companies:
+            print(f"Company ID: {company.company_id}, Name: {company.company_name}")
+        serializer = CompanySerializer(companies, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        print(f"Error in get_companies: {str(e)}")
+        return Response({'error': f'Failed to retrieve companies: {str(e)}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_odoo_credentials(request):
     if not request.user.is_active:
         return Response({'error': 'User account is disabled'}, status=status.HTTP_403_FORBIDDEN)
-    
     db_url = request.data.get('db_url')
     db_name = request.data.get('db_name')
     email = request.data.get('email')
     api_key = request.data.get('api_key')
-    
     if not all([db_url, db_name, email, api_key]):
-        return Response({'error': 'All fields (db_url, db_name, email, api_key) are required'},  status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response({'error': 'All fields (db_url, db_name, email, api_key) are required'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if OdooCredentials.objects.filter(recruiter=request.user, db_name=db_name).exists():
+        return Response({'error': 'Credentials for this database already exist'},
+                        status=status.HTTP_400_BAD_REQUEST)
     odoo_service = OdooService(db_url, db_name, email, api_key)
     if not odoo_service.authenticate():
         return Response({'error': 'Invalid Odoo credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-    
     try:
         user_info = odoo_service.get_user_info()
         if not user_info:
-            return Response({'error': 'Failed to retrieve user info from Odoo'}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response({'error': 'Failed to retrieve user info from Odoo'},
+                            status=status.HTTP_400_BAD_REQUEST)
         odoo_user_id = user_info[0]['id']
     except Exception as e:
-        return Response({'error': f'Failed to retrieve user info: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    credentials, created = OdooCredentials.objects.update_or_create(
+        return Response({'error': f'Failed to retrieve user info: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    credentials = OdooCredentials.objects.create(
         recruiter=request.user,
         odoo_user_id=odoo_user_id,
-        defaults={
-            'api_key': api_key, 
-            'email_address': email,
-            'db_name': db_name,
-            'db_url': db_url,
-        }
+        api_key=api_key,
+        email_address=email,
+        db_name=db_name,
+        db_url=db_url,
     )
-    
     try:
-        synced_companies = CompanySyncService.sync_recruiter_companies(request.user)
-        companies_serializer = CompanySerializer(synced_companies, many=True)
+        odoo_companies = odoo_service.get_user_companies()
+        print(f"Found {len(odoo_companies)} companies in Odoo for user {request.user.email}")
+        existing_companies = Company.objects.filter(recruiter=request.user)
+        print(f"Found {existing_companies.count()} existing companies for this recruiter")
+        created_companies = []
+        for odoo_company in odoo_companies:
+            print(f"Processing Odoo company: {odoo_company}")
+            company_name = odoo_company['name']
+            existing_company = existing_companies.filter(company_name=company_name).first()
+            if existing_company:
+                print(f"Found existing company by name: {existing_company.company_name} (ID: {existing_company.company_id})")
+                existing_company.odoo_credentials = credentials
+                existing_company.save()
+                created_companies.append(existing_company)
+            else:
+                print(f"Creating new company: {company_name}")
+                comp = Company.objects.create(
+                    company_name=company_name,
+                    recruiter=request.user,
+                    odoo_credentials=credentials,
+                    is_active=True
+                )
+                print(f"Created new company with ID: {comp.company_id}")
+                created_companies.append(comp)
     except Exception as e:
-        return Response({'error': f'Failed to sync companies: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-    
+        print(f"Error syncing companies: {str(e)}")
+        return Response({'error': f'Failed to retrieve companies: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
     serializer = OdooCredentialsSerializer(credentials)
-    
+    companies_serializer = CompanySerializer(created_companies, many=True)
     return Response({
         'message': 'Odoo credentials added successfully',
         'credentials': serializer.data,
         'companies': companies_serializer.data
-    }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
-
+    }, status=status.HTTP_201_CREATED)
+@api_view(['PATCH'])
+@permission_classes([permissions.IsAuthenticated])
+def update_profile(request):
+    try:
+        user = request.user
+        serializer = RecruiterSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            if 'email' in request.data and request.data['email'] != user.email:
+                if Recruiter.objects.filter(email=request.data['email']).exists():
+                    return Response(
+                        {'error': 'Email already in use'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            serializer.save()
+            return Response({
+                'message': 'Profile updated successfully',
+                'user': serializer.data
+            })
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'error': f'Failed to update profile: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+@api_view(['DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def delete_account(request):
+    try:
+        user = request.user
+        try:
+            token = Token.objects.get(user=user)
+            token.delete()
+        except Token.DoesNotExist:
+            pass
+        OdooCredentials.objects.filter(recruiter=user).delete()
+        user.delete()
+        return Response({
+            'message': 'Account deleted successfully'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({
+            'error': f'Failed to delete account: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_odoo_credentials(request):

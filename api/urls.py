@@ -40,4 +40,6 @@ urlpatterns = [
     path('auth/google/initiate/', views.google_auth_initiate, name='google_auth_initiate'),
     path('auth/google/callback/', views.google_auth_callback, name='google_auth_callback'),
     path('api/auth/google/callback/', views.google_auth_callback, name='api_google_auth_callback'),
+    path('update-profile/', views.update_profile, name='update-profile'),
+    path('delete-account/', views.delete_account, name='delete-account'),
 ]
