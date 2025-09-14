@@ -83,7 +83,7 @@ class GoogleCalendarService:
         )
         flow.fetch_token(code=code)
         credentials = flow.credentials
-        credentials_dict = {
+        creds_dict = {
             'token': credentials.token,
             'refresh_token': credentials.refresh_token,
             'token_uri': credentials.token_uri,
@@ -92,7 +92,7 @@ class GoogleCalendarService:
             'scopes': credentials.scopes,
             'expiry': credentials.expiry.isoformat() if credentials.expiry else None
         }
-        request.session[f'google_credentials_{user_id}'] = credentials_dict
+        request.session[f'google_credentials_{user_id}'] = creds_dict
         request.session.pop('google_oauth_state', None)
         request.session.pop('google_oauth_user_id', None)
         return credentials
@@ -108,7 +108,7 @@ class GoogleCalendarService:
                     "token_uri": os.environ.get('GOOGLE_TOKEN_URI', 'https://oauth2.googleapis.com/token'),
                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
                     "client_secret": os.environ.get('GOOGLE_CLIENT_SECRET'),
-                    "redirect_uris": [os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost')]
+                    "redirect_uris": [os.environ.get('GOOGLE_REDIRECT_URIS', 'http://localhost')]
                 }
             }
             with open(CREDENTIALS_PATH, 'w') as f:
