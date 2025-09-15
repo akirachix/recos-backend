@@ -424,6 +424,20 @@ class JobViewSet(viewsets.ModelViewSet):
         else:
             raise serializers.ValidationError("company_id is required")
 
+# class CandidateViewSet(viewsets.ModelViewSet):
+#     serializer_class = CandidateSerializer
+#     permission_classes = [permissions.IsAuthenticated]
+    
+#     def get_queryset(self):
+#         queryset = Candidate.objects.filter(job__company__recruiter=self.request.user)
+#         job_id = self.request.query_params.get('job_id', None)
+#         if job_id is not None:
+#             queryset = queryset.filter(job_id=job_id)
+#         return queryset
+    
+#     def perform_create(self, serializer):
+#         raise serializer.ValidationError("Candidates must be synced from Odoo")
+
 class CandidateViewSet(viewsets.ModelViewSet):
     serializer_class = CandidateSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -436,7 +450,15 @@ class CandidateViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        raise serializer.ValidationError("Candidates must be synced from Odoo")
+        job_ids = self.request.data.get('jobs', [])
+        if not job_ids:
+            raise serializer.ValidationError("Candidates must be linked to at least one job.")
+        
+        candidate = serializer.save()
+        
+        jobs = Job.objects.filter(id__in=job_ids)
+        candidate.jobs.add(*jobs)
+
 
 class RecruiterRegistrationView(generics.CreateAPIView):
     queryset = Recruiter.objects.all()
@@ -910,7 +932,24 @@ def sync_candidates_for_job(request, job_id):
             'candidates': serializer.data
         })
     except Exception as e:
-        return Response({'error': f'Failed to sync candidates: {str(e)}'},status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Failed to sync candidates: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_candidates_for_company(request, company_id):
+    try:
+        company = Company.objects.get(company_id=company_id, recruiter=request.user)
+    except Company.DoesNotExist:
+        return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    try:
+        synced_count = CandidateSyncService.sync_candidates_for_company(company)
+        return Response({
+            'message': f'Successfully synced {synced_count} candidates'
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync candidates: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
