@@ -527,6 +527,7 @@ def logout_view(request):
         logout(request)
         return Response({'message': 'Logout successful'})
     return Response({'error': 'You are not logged in'}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def verify_companies(request):
@@ -555,6 +556,7 @@ def verify_companies(request):
         return Response(data)
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+    
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_companies(request):
@@ -568,6 +570,7 @@ def sync_companies(request):
     except Exception as e:
         return Response({'error': f'Failed to sync companies: {str(e)}'},
                         status=status.HTTP_400_BAD_REQUEST)
+    
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def reset_company_sequence(request):
@@ -585,6 +588,7 @@ def reset_company_sequence(request):
         })
     except Exception as e:
         return Response({'error': str(e)}, status=500)
+    
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_companies(request):
@@ -601,6 +605,7 @@ def get_companies(request):
         print(f"Error in get_companies: {str(e)}")
         return Response({'error': f'Failed to retrieve companies: {str(e)}'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_odoo_credentials(request):
@@ -672,6 +677,7 @@ def add_odoo_credentials(request):
         'credentials': serializer.data,
         'companies': companies_serializer.data
     }, status=status.HTTP_201_CREATED)
+
 @api_view(['PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def update_profile(request):
@@ -696,6 +702,7 @@ def update_profile(request):
         return Response({
             'error': f'Failed to update profile: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def delete_account(request):
@@ -715,6 +722,7 @@ def delete_account(request):
         return Response({
             'error': f'Failed to delete account: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def get_odoo_credentials(request):
