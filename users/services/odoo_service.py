@@ -141,8 +141,9 @@ class OdooService:
         domain = []
         if job_id:
             domain.append(('job_id', '=', job_id))
-        elif company_id:
+        if company_id:
             domain.append(('company_id', '=', company_id))
+
         fields = [
             'id',
             'partner_name',
@@ -156,15 +157,13 @@ class OdooService:
             'create_date',
             'department_id',
         ]
-        try:
-            return self.call_odoo(
-                'hr.applicant',
-                'search_read',
-                [domain],
-                {'fields': fields}
-            )
-        except Exception as e:
-            raise
+        return self.call_odoo(
+            'hr.applicant',
+            'search_read',
+            [domain],
+            {'fields': fields}
+        )
+
     def get_user_info(self):
         return self.call_odoo(
             'res.users',
