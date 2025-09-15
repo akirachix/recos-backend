@@ -47,7 +47,6 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
         else:
             return "File"
 
-
 class InterviewConversationSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterviewConversation
@@ -60,27 +59,25 @@ class InterviewSerializer(serializers.ModelSerializer):
     recruiter_email = serializers.CharField(source='recruiter.email', read_only=True)
     is_upcoming = serializers.BooleanField(read_only=True)
     end_time = serializers.DateTimeField(read_only=True)
-    
+
     class Meta:
         model = Interview
         fields = [
-            'id',
+            'interview_id',
             'candidate', 'recruiter',
             'candidate_name', 'candidate_email',
             'recruiter_name', 'recruiter_email',
             'title', 'description',
             'scheduled_at', 'duration', 'end_time',
             'interview_link', 'required_preparation',
-            'status',
-            'google_event_id', 'google_calendar_link', 'send_calendar_invite',
-            'is_upcoming',
-            'created_at', 'updated_at', 'completed_at'
+            'status', 'google_event_id', 'google_calendar_link', 'send_calendar_invite',
+            'is_upcoming', 'created_at', 'updated_at', 'completed_at'
         ]
         read_only_fields = [
-            'candidate_id', 'candidate_name', 'candidate_email', 
+            'candidate_name', 'candidate_email',
             'recruiter_name', 'recruiter_email',
-            'end_time', 'is_upcoming', 'google_event_id', 
-            'google_calendar_link', 'created_at', 'updated_at', 
+            'end_time', 'is_upcoming', 'google_event_id',
+            'google_calendar_link', 'created_at', 'updated_at',
             'completed_at'
         ]
     
@@ -114,17 +111,33 @@ class InterviewCreateSerializer(InterviewSerializer):
     
     class Meta(InterviewSerializer.Meta):
         read_only_fields = InterviewSerializer.Meta.read_only_fields + [
-            'status', 'result', 'google_event_id', 'google_calendar_link'
+            'status', 'result'  
         ]
     
     def validate(self, data):
         """Additional validation for creation"""
         data = super().validate(data)
         
+        if self.instance is None and 'candidate' not in data:
+            raise serializers.ValidationError({
+                'candidate': 'This field is required when creating an interview.'
+            })
+        
+        if self.instance is None and 'recruiter' not in data:
+            raise serializers.ValidationError({
+                'recruiter': 'This field is required when creating an interview.'
+            })
+        
         if self.instance is None:
             data['status'] = 'draft'
         
         return data
+    
+    def create(self, validated_data):
+        if 'recruiter' not in validated_data:
+            validated_data['recruiter'] = self.context['request'].user
+        
+        return super().create(validated_data)
 
 class InterviewUpdateSerializer(InterviewSerializer):
     """Serializer specifically for updating interviews"""
@@ -174,7 +187,7 @@ class InterviewCalendarSerializer(serializers.ModelSerializer):
     class Meta:
         model = Interview
         fields = [
-            'id', 'title', 'start', 'end', 'candidate_name', 
+            'interview_id', 'title', 'start', 'end', 'candidate_name', 
             'job_title', 'interview_type', 'status', 'interview_link'
         ]
     
@@ -214,21 +227,32 @@ class InterviewCompanyChoiceSerializer(serializers.ModelSerializer):
 
 class JobSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source='company.company_name', read_only=True)
+    company_id = serializers.IntegerField(source='company.company_id', read_only=True)
     
     class Meta:
         model = Job
         fields = [
-            'job_id', 'company', 'company_name', 'odoo_job_id', 'job_title',
-            'job_description', 'generated_job_summary', 'state', 'posted_at',
-            'expired_at', 'created_at', 'updated_at'
+            'job_id', 
+            'company', 
+            'company_name', 
+            'company_id',
+            'job_title', 
+            'job_description', 
+            'generated_job_summary', 
+            'state', 
+            'posted_at', 
+            'expired_at',  
+            'created_at'
         ]
-        read_only_fields = ['job_id', 'created_at', 'updated_at']
-
+        extra_kwargs = {
+            'company': {'required': True},
+            'expired_at': {'required': False} 
+        }
 
 class CandidateSerializer(serializers.ModelSerializer):
     job_title = serializers.CharField(source='job.job_title', read_only=True)
     company_name = serializers.CharField(source='job.company.company_name', read_only=True)
-    
+
     class Meta:
         model = Candidate
         fields = [
@@ -238,6 +262,7 @@ class CandidateSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['candidate_id', 'created_at', 'updated_at']
+
 
 
 class RecruiterSerializer(serializers.ModelSerializer):
@@ -272,23 +297,22 @@ class OdooCredentialsSerializer(serializers.ModelSerializer):
         return representation
 
 class CompanySerializer(serializers.ModelSerializer):
+    recruiter_email = serializers.CharField(source='recruiter.email', read_only=True)
+    recruiter_id = serializers.IntegerField(source='recruiter.id', read_only=True)
     class Meta:
         model = Company
-        fields = ['company_id', 'company_name', 'created_at']
-        read_only_fields = ['company_id', 'created_at']
-
-    def validate_company_name(self, value):
-        """Ensure company name is unique for this recruiter"""
-        request = self.context.get('request')
-        if request and request.user.is_authenticated:
-            if Company.objects.filter(
-                recruiter=request.user, 
-                company_name__iexact=value
-            ).exists():
-                raise serializers.ValidationError(
-                    "You already have a company with this name."
-                )
-        return value
+        fields = [
+            'company_id',
+            'company_name',
+            'recruiter',
+            'recruiter_email',
+            'recruiter_id',
+            'odoo_credentials',
+            'is_active',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = ['recruiter', 'created_at', 'updated_at']
 
 class AIReportSerializer(serializers.ModelSerializer):
     class Meta:
