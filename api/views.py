@@ -413,7 +413,16 @@ class JobViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        raise serializer.ValidationError("Jobs must be synced from Odoo")
+        company_id = self.request.data.get('company_id')
+        if company_id:
+            try:
+                company = Company.objects.get(company_id=company_id, recruiter=self.request.user)
+                expired_at = self.request.data.get('expired_at', timezone.now() + timedelta(days=365))
+                serializer.save(company=company, expired_at=expired_at)
+            except Company.DoesNotExist:
+                raise serializers.ValidationError("Company not found or doesn't belong to you")
+        else:
+            raise serializers.ValidationError("company_id is required")
 
 class CandidateViewSet(viewsets.ModelViewSet):
     serializer_class = CandidateSerializer
@@ -751,7 +760,12 @@ def get_candidates_by_job(request, job_id):
 @permission_classes([permissions.IsAuthenticated])
 def sync_jobs_for_company(request, company_id):
     try:
-        company = Company.objects.get(company_id=company_id, recruiter=request.user)
+        try:
+            company = Company.objects.get(company_id=company_id, recruiter=request.user)
+        except Company.MultipleObjectsReturned:
+            company = Company.objects.filter(company_id=company_id, recruiter=request.user).first()
+            if not company:
+                return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
     except Company.DoesNotExist:
         return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
     
@@ -763,7 +777,114 @@ def sync_jobs_for_company(request, company_id):
             'jobs': serializer.data
         })
     except Exception as e:
-        return Response({'error': f'Failed to sync jobs: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': f'Failed to sync jobs: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_jobs_for_user(request):
+    try:
+        from job.services.job_sync_service import JobSyncService
+        synced_jobs = JobSyncService.sync_jobs_for_user(request.user)
+        serializer = JobSerializer(synced_jobs, many=True)
+        return Response({
+            'message': f'Successfully synced {len(synced_jobs)} jobs',
+            'jobs': serializer.data
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync jobs: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def sync_jobs_handle_duplicates(request):
+    try:
+        from job.services.job_sync_service import JobSyncService
+        
+        recruiter = request.user
+        odoo_creds = OdooCredentials.objects.filter(recruiter=recruiter).last()
+        if not odoo_creds:
+            return Response({'error': 'No Odoo credentials found'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        odoo_service = OdooService(
+            db_url=odoo_creds.db_url,
+            db_name=odoo_creds.db_name,
+            email=odoo_creds.email_address,
+            api_key=odoo_creds.get_api_key()
+        )
+        
+        if not odoo_service.authenticate():
+            return Response({'error': 'Failed to authenticate with Odoo'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        odoo_jobs = odoo_service.get_jobs(user_id=odoo_creds.odoo_user_id)
+        synced_jobs = []
+        skipped_jobs = []
+        
+        companies = Company.objects.filter(recruiter=recruiter)
+        
+        company_map = {}
+        for company in companies:
+            if company.company_name not in company_map:
+                company_map[company.company_name] = company
+        
+        duplicate_companies = {}
+        for company in companies:
+            if company.company_name in duplicate_companies:
+                duplicate_companies[company.company_name] += 1
+            else:
+                duplicate_companies[company.company_name] = 1
+        
+        for odoo_job in odoo_jobs:
+            job_company_name = None
+            
+            if odoo_job.get('company_id') and isinstance(odoo_job['company_id'], list):
+                job_company_name = odoo_job['company_id'][1]
+            
+            if not job_company_name:
+                skipped_jobs.append({
+                    'job_title': odoo_job.get('name'),
+                    'reason': 'No company name found'
+                })
+                continue
+            
+            if job_company_name not in company_map:
+                skipped_jobs.append({
+                    'job_title': odoo_job.get('name'),
+                    'company_name': job_company_name,
+                    'reason': 'Company not found in database'
+                })
+                continue
+            
+            company = company_map[job_company_name]
+            
+            is_duplicate = duplicate_companies.get(job_company_name, 0) > 1
+            
+            job, created = Job.objects.update_or_create(
+                company=company,
+                job_title=odoo_job['name'],
+                defaults={
+                    'job_description': odoo_job.get('description', ''),
+                    'state': odoo_job.get('state', 'open'),
+                    'expired_at': timezone.now() + timedelta(days=365)
+                }
+            )
+            
+            synced_jobs.append({
+                'job': job,
+                'created': created,
+                'company_name': job_company_name,
+                'is_duplicate_company': is_duplicate
+            })
+        
+        return Response({
+            'message': f'Successfully synced {len(synced_jobs)} jobs, skipped {len(skipped_jobs)} jobs',
+            'synced_jobs': JobSerializer([item['job'] for item in synced_jobs], many=True).data,
+            'sync_details': synced_jobs,
+            'skipped_jobs': skipped_jobs
+        })
+    except Exception as e:
+        return Response({'error': f'Failed to sync jobs: {str(e)}'},
+                        status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
