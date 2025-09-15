@@ -227,15 +227,27 @@ class InterviewCompanyChoiceSerializer(serializers.ModelSerializer):
 
 class JobSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source='company.company_name', read_only=True)
+    company_id = serializers.IntegerField(source='company.company_id', read_only=True)
     
     class Meta:
         model = Job
         fields = [
-            'job_id', 'company', 'company_name', 'odoo_job_id', 'job_title',
-            'job_description', 'generated_job_summary', 'state', 'posted_at',
-            'expired_at', 'created_at', 'updated_at'
+            'job_id', 
+            'company', 
+            'company_name', 
+            'company_id',
+            'job_title', 
+            'job_description', 
+            'generated_job_summary', 
+            'state', 
+            'posted_at', 
+            'expired_at',  
+            'created_at'
         ]
-        read_only_fields = ['job_id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'company': {'required': True},
+            'expired_at': {'required': False} 
+        }
 
 
 class CandidateSerializer(serializers.ModelSerializer):
