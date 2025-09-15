@@ -1,4 +1,3 @@
-
 from rest_framework.routers import DefaultRouter
 from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet
 from django.urls import path,include
@@ -38,4 +37,9 @@ urlpatterns = [
     path('interviews/create/', views.create_interview, name='create-interview'),
     path('interviews/<int:interview_id>/create-calendar-event/', views.create_interview_event, name='create-calendar-event'),
     path('interviews/<int:interview_id>/analytics/', views.get_interview_analytics, name='get-interview-analytics'),
+    path('auth/google/initiate/', views.google_auth_initiate, name='google_auth_initiate'),
+    path('auth/google/callback/', views.google_auth_callback, name='google_auth_callback'),
+    path('api/auth/google/callback/', views.google_auth_callback, name='api_google_auth_callback'),
+    path('update-profile/', views.update_profile, name='update-profile'),
+    path('delete-account/', views.delete_account, name='delete-account'),
 ]

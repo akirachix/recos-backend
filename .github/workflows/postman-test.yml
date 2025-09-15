@@ -1,0 +1,54 @@
+name: Automated API tests using Postman CLI
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+jobs:
+  automated-api-tests:
+    runs-on: macos-latest
+    env:
+      COL_UID: "445699975-a7992bee-3e46-47ba-a6ce-f66682c49b28"
+      ENV_UID: "45699975-2551ac4b-7105-4e30-b96e-eb993f368677"
+      POSTMAN_API_KEY: "PMAK-68c819b13a605400018e56ea-9d52feef50d28a55f09d8e95d6d38dba9d"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Postman CLI
+        run: |
+          curl -o- "https://dl-cli.pstmn.io/install/osx_64.sh" | sh
+      - name: Debug Environment & Collection IDs
+        run: |
+          echo "=== DEBUG INFO ==="
+          echo "COL_UID: $COL_UID"
+          echo "ENV_UID: $ENV_UID"
+          echo "POSTMAN_API_KEY starts with: ${POSTMAN_API_KEY:0:5}..."
+          if [[ -z "$COL_UID" ]]; then echo "COL_UID is empty!"; exit 1; fi
+          if [[ -z "$ENV_UID" ]]; then echo "ENV_UID is empty!"; exit 1; fi
+          if [[ -z "$POSTMAN_API_KEY" ]]; then echo "POSTMAN_API_KEY is empty!"; exit 1; fi
+      - name: Login to Postman CLI
+        run: postman login --with-api-key "$POSTMAN_API_KEY"
+      - name: Run API tests
+        run: |
+          mkdir -p reports
+          postman collection run "$COL_UID" -e "$ENV_UID" \
+            --reporters cli,junit \
+            --reporter-junit-export reports/junit.xml
+      - name: Upload JUnit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: postman-junit
+          path: reports/junit.xml
+
+
+
+
+
+
+
+
+
