@@ -1,9 +1,14 @@
 from django.db import models
-import time
 from interview.models import Interview
+
 class InterviewConversation(models.Model):
     conversation_id = models.AutoField(primary_key=True)
-    interview = models.ForeignKey(Interview, on_delete=models.CASCADE)
+    interview = models.ForeignKey(
+        Interview,
+        to_field='interview_id',     
+        on_delete=models.CASCADE,
+        related_name='conversations'
+    )
     question_text = models.TextField()
     expected_answer = models.TextField(null=True, blank=True)
     candidate_answer = models.TextField(null=True, blank=True)
@@ -12,6 +17,4 @@ class InterviewConversation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Conversation {self.conversation_id}"
-
-    
+        return f"Conversation {self.conversation_id} for Interview {self.interview_id}"
