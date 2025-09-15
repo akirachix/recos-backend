@@ -1,43 +1,31 @@
 name: Automated API tests using Postman CLI
-
 on:
   push:
-    branches:
-      - main
-      - develop
-      - feature/test-workflows
   pull_request:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
-
 jobs:
   automated-api-tests:
     runs-on: macos-latest
     env:
       COL_UID: ${{ secrets.COL_UID }}
       ENV_UID: ${{ secrets.ENV_UID }}
-      POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+      POSTMAN_API_KEY: ${{ secrets.PIMA_API_KEY }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Postman CLI
         run: |
           curl -o- "https://dl-cli.pstmn.io/install/osx_64.sh" | sh
-
       - name: Login to Postman CLI
         run: postman login --with-api-key "$POSTMAN_API_KEY"
-
       - name: Run API tests
         run: |
           mkdir -p reports
           postman collection run "$COL_UID" -e "$ENV_UID" \
             --reporters cli,junit \
-            --reporter-junit-export reports/junit.xml || true
-
+            --reporter-junit-export reports/junit.xml
       - name: Upload JUnit report
         uses: actions/upload-artifact@v4
         with:
           name: postman-junit
           path: reports/junit.xml
+
