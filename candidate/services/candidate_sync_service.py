@@ -32,7 +32,7 @@ class CandidateSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
             
-            odoo_candidates = odoo_service.get_candidates(job_id=job.odoo_job_id)
+            odoo_candidates = odoo_service.get_candidates(job_id=job.job_id)
             
             synced_candidates = []
             for odoo_candidate in odoo_candidates:
