@@ -1,4 +1,5 @@
 import logging
+import json
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
@@ -19,9 +20,31 @@ class GoogleCalendarService:
     AI_ASSISTANT_NAME = getattr(settings, 'AI_ASSISTANT_NAME', 'Recos AI Assistant')
     
     @staticmethod
+    def _create_credentials_file_if_needed():
+        """Create credentials.json from environment variables if it doesn't exist"""
+        if not os.path.exists(CREDENTIALS_PATH):
+            credentials_data = {
+                "installed": {
+                    "client_id": os.environ.get('GOOGLE_CLIENT_ID'),
+                    "project_id": os.environ.get('GOOGLE_PROJECT_ID'),
+                    "auth_uri": os.environ.get('GOOGLE_AUTH_URI'),
+                    "token_uri": os.environ.get('GOOGLE_TOKEN_URI'),
+                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                    "client_secret": os.environ.get('GOOGLE_CLIENT_SECRET'),
+                    "redirect_uris": [os.environ.get('GOOGLE_REDIRECT_URIS')]
+                }
+            }
+            
+            with open(CREDENTIALS_PATH, 'w') as f:
+                json.dump(credentials_data, f, indent=2)
+            
+            logger.info(f"Created {CREDENTIALS_PATH} from environment variables")
+    
+    @staticmethod
     def get_credentials(user=None):
         try:
-            credentials_path =  'credentials.json'
+            GoogleCalendarService._create_credentials_file_if_needed()
+            
             if user:
                 token_path = f'token_{user.id}.pickle'
             else:
@@ -36,9 +59,9 @@ class GoogleCalendarService:
                 if credentials and credentials.expired and credentials.refresh_token:
                     credentials.refresh(Request())
                 else:
-                    if not os.path.exists(credentials_path):
-                        raise FileNotFoundError(f"Google credentials file not found at {credentials_path}")
-                    flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
+                    if not os.path.exists(CREDENTIALS_PATH):
+                        raise FileNotFoundError(f"Google credentials file not found at {CREDENTIALS_PATH}")
+                    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
                     credentials = flow.run_local_server(port=0)
                 
                 with open(token_path, 'wb') as token:
