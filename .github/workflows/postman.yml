@@ -1,15 +1,7 @@
-# test
 name: Automated API tests using Postman CLI
 on:
   push:
-    branches:
-      - main
-      - develop
-      - feature/test-workflows
   pull_request:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
 jobs:
   automated-api-tests:
@@ -17,7 +9,7 @@ jobs:
     env:
       COL_UID: ${{ secrets.COL_UID }}
       ENV_UID: ${{ secrets.ENV_UID }}
-      POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+      POSTMAN_API_KEY: ${{ secrets.PIMA_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Postman CLI
