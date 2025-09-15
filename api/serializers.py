@@ -249,35 +249,20 @@ class JobSerializer(serializers.ModelSerializer):
             'expired_at': {'required': False} 
         }
 
-
-# class CandidateSerializer(serializers.ModelSerializer):
-#     job_title = serializers.CharField(source='job.job_title', read_only=True)
-#     company_name = serializers.CharField(source='job.company.company_name', read_only=True)
-    
-#     class Meta:
-#         model = Candidate
-#         fields = [
-#             'candidate_id', 'job', 'job_title', 'company_name', 'odoo_candidate_id',
-#             'name', 'email', 'phone', 'generated_skill_summary', 'state',
-#             'partner_id', 'date_open', 'date_last_stage_update',
-#             'created_at', 'updated_at'
-#         ]
-#         read_only_fields = ['candidate_id', 'created_at', 'updated_at']
-
 class CandidateSerializer(serializers.ModelSerializer):
     job_title = serializers.CharField(source='job.job_title', read_only=True)
     company_name = serializers.CharField(source='job.company.company_name', read_only=True)
-    jobs = serializers.SlugRelatedField(slug_field='job_title', queryset=Job.objects.all(), many=True)
 
     class Meta:
         model = Candidate
         fields = [
-            'candidate_id', 'jobs', 'job_title', 'company_name', 'odoo_candidate_id',
+            'candidate_id', 'job', 'job_title', 'company_name', 'odoo_candidate_id',
             'name', 'email', 'phone', 'generated_skill_summary', 'state',
             'partner_id', 'date_open', 'date_last_stage_update',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['candidate_id', 'created_at', 'updated_at']
+
 
 
 class RecruiterSerializer(serializers.ModelSerializer):
