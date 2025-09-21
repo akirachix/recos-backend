@@ -1,38 +1,33 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from rest_framework import viewsets, generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.reverse import reverse
-from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.authtoken.models import Token
-from django.contrib.auth.tokens import default_token_generator
-from django.template.loader import render_to_string
 from django.core.mail import send_mail
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
-from django.utils.encoding import force_bytes, force_str
 from django.utils import timezone
 from datetime import timedelta
-from django.http import HttpResponse
+from django.http import HttpResponse, FileResponse
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
-import random
 import os
+import logging
+import random
 import requests
-import re
-from django.shortcuts import get_object_or_404
-from django.http import FileResponse, HttpResponseForbidden
-from django.views.generic import ListView, DetailView
-from interviewConversation.models import InterviewConversation
-from job.models import Job
-from candidate.models import Candidate, CandidateAttachment
-from interview.models import Interview
+from django.core.cache import cache
+
 from users.models import Recruiter, OdooCredentials
 from companies.models import Company
 from ai_reports.models import AIReport
-from rest_framework.permissions import IsAuthenticated
+from candidate.models import Candidate, CandidateAttachment
+from interview.models import Interview
+from interviewConversation.models import InterviewConversation
+from job.models import Job
 
-from .serializers import (
+from api.serializers import (
     InterviewConversationSerializer, 
     JobSerializer, 
     CandidateSerializer, 
@@ -45,19 +40,113 @@ from .serializers import (
     InterviewCreateSerializer,
     InterviewListSerializer,
     InterviewUpdateSerializer,
-    CandidateAttachmentSerializer
+    CandidateAttachmentSerializer,
+    ForgotPasswordSerializer,
+    VerifyCodeSerializer,
+    ResetPasswordSerializer
 )
 
 from users.services.odoo_service import OdooService
 from companies.services.company_sync_service import CompanySyncService
 from job.services.job_sync_service import JobSyncService
 from candidate.services.candidate_sync_service import CandidateSyncService
-from .serializers import CandidateAttachmentSerializer
 from interview.utils import GoogleCalendarService
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status, permissions
 
-import logging
+
 
 logger = logging.getLogger(__name__)
+
+
+class ForgotPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').lower().strip()
+        if not email:
+            return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = Recruiter.objects.get(email=email)
+        except Recruiter.DoesNotExist:
+            return Response({'message': 'Password reset code sent if email exists in our system'}, status=status.HTTP_200_OK)
+
+        verification_code = ''.join(random.choices('0123456789', k=4))
+        cache.set(f'reset_code_{email}', verification_code, timeout=3*60)
+
+        subject = 'Password Reset Verification Code'
+        message = (
+            f"Hello {user.first_name},\n\n"
+            f"We received a request to reset your password. Use the verification code below:\n\n"
+            f"{verification_code}\n\n"
+            f"This code will expire in 3 minutes.\n\n"
+            f"If you didn't request this, please ignore this email.\n\n"
+            f"Thank you,\nThe {getattr(settings, 'SITE_NAME', 'Your Site Name')} Team"
+        )
+
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False,
+        )
+
+        return Response({'message': 'Password reset code sent.'}, status=status.HTTP_200_OK)
+
+
+class VerifyCodeView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').lower().strip()
+        code = str(request.data.get('code', '')).strip()
+        if not email or not code:
+            return Response({'detail': 'Email and code are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        cached_code = cache.get(f'reset_code_{email}')
+        if cached_code is None:
+            return Response({"detail": "Code has expired, please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+        if cached_code != code:
+            return Response({"detail": "Invalid code."}, status=status.HTTP_400_BAD_REQUEST)
+
+        request.session['reset_email'] = email
+        cache.delete(f'reset_code_{email}')
+        return Response({"detail": "Code verified, you may now reset your password."})
+
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        new_password = serializer.validated_data['new_password']
+        confirm_password = serializer.validated_data['confirm_password']
+
+        if new_password != confirm_password:
+            return Response({"detail": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        email = request.session.get('reset_email')
+        if not email:
+            return Response({'detail': 'Session expired or invalid request.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = Recruiter.objects.get(email=email)
+        except Recruiter.DoesNotExist:
+            return Response({'detail': 'No user found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+        request.session.pop('reset_email', None)
+
+        return Response({"detail": "Password reset successful."})
+
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -99,6 +188,8 @@ def google_auth_callback(request):
             'error': str(e),
             'query_params': dict(request.GET)
         }, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -993,112 +1084,6 @@ def sync_all_data(request):
         })
     except Exception as e:
         return Response({'error': f'Failed to sync data: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def forgot_password(request):
-    email = request.data.get('email')
-    
-    if not email:
-        return Response({'error': 'Email is required'}, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        user = Recruiter.objects.get(email=email)
-    except Recruiter.DoesNotExist:
-        return Response({'message': 'Password reset code sent if email exists in our system'},  status=status.HTTP_200_OK)
-    
-    verification_code = ''.join(random.choices('0123456789', k=6))
-    
-    user.verification_code = verification_code
-    user.verification_code_expires = timezone.now() + timedelta(minutes=15)
-    user.save()
-    
-    subject = 'Password Reset Verification Code'
-    message = (
-        f"Hello {user.first_name},\n\n"
-        f"We received a request to reset your password. Use the verification code below:\n\n"
-        f"{verification_code}\n\n"
-        f"This code will expire in 15 minutes.\n\n"
-        f"If you didn't request this, please ignore this email.\n\n"
-        f"Thank you,\nThe {getattr(settings, 'SITE_NAME', 'Your Site Name')} Team"
-    )
-    
-    send_mail(
-        subject,
-        message,
-        settings.DEFAULT_FROM_EMAIL,
-        [user.email],
-        fail_silently=False,
-    )
-    
-    return Response({'message': 'Password reset code sent.'}, status=status.HTTP_200_OK)
-
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def reset_password(request):
-    email = request.data.get('email')
-    code = request.data.get('code')
-    new_password = request.data.get('new_password')
-    confirm_password = request.data.get('confirm_password')
-    
-    if not email or not code or not new_password or not confirm_password:
-        return Response({
-            'error': 'Email, code, new_password, and confirm_password are required'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    if new_password != confirm_password:
-        return Response({
-            'error': 'Passwords do not match'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        user = Recruiter.objects.get(email=email)
-    except Recruiter.DoesNotExist:
-        return Response({
-            'error': 'Invalid email address'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    if not user.is_verification_code_valid(code):
-        return Response({
-            'error': 'Invalid or expired verification code'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    user.set_password(new_password)
-    user.verification_code = None 
-    user.verification_code_expires = None
-    user.save()
-    
-    return Response({
-        'message': 'Password has been reset successfully'
-    }, status=status.HTTP_200_OK)
-
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def verify_reset_code(request):
-    email = request.data.get('email')
-    code = request.data.get('code')
-    
-    if not email or not code:
-        return Response({
-            'error': 'Email and code are required'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        user = Recruiter.objects.get(email=email)
-    except Recruiter.DoesNotExist:
-        return Response({
-            'valid': False,
-            'error': 'Invalid email address'
-        }, status=status.HTTP_400_BAD_REQUEST)
-    if user.is_verification_code_valid(code):
-        return Response({
-            'valid': True
-        }, status=status.HTTP_200_OK)
-    else:
-        return Response({
-            'valid': False,
-            'error': 'Invalid or expired verification code'
-        }, status=status.HTTP_400_BAD_REQUEST)
-
 @api_view(['GET'])
 def api_root(request, format=None):
     return Response({
