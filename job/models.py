@@ -16,7 +16,7 @@ class Job(models.Model):
     job_description = models.TextField()
     generated_job_summary = models.TextField(blank=True, null=True)
     state = models.CharField(max_length=50, choices=JOB_STATES, default='open') 
-    posted_at = models.DateTimeField(auto_now_add=True)
+    posted_at = models.DateTimeField()
     expired_at = models.DateTimeField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
