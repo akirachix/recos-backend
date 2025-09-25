@@ -43,7 +43,8 @@ class JobSyncService:
                     defaults={
                         'job_description': odoo_job.get('description', ''),
                         'state': odoo_job.get('state', 'open'),
-                        'expired_at': timezone.now() + timedelta(days=365)
+                        'expired_at': timezone.now() + timedelta(days=365),
+                        'posted_at': odoo_job.get('create_date', timezone.now())
                     }
                 )
                 synced_jobs.append(job)
@@ -97,7 +98,8 @@ class JobSyncService:
                     defaults={
                         'job_description': odoo_job.get('description', ''),
                         'state': odoo_job.get('state', 'open'),
-                        'expired_at': timezone.now() + timedelta(days=365)
+                        'expired_at': timezone.now() + timedelta(days=365),
+                        'posted_at': odoo_job.get('create_date', timezone.now())
                     }
                 )
                 synced_jobs.append(job)
