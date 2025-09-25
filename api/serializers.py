@@ -262,8 +262,14 @@ class VerifyCodeSerializer(serializers.Serializer):
     code = serializers.CharField()
 
 class ResetPasswordSerializer(serializers.Serializer):
-    new_password = serializers.CharField()
-    confirm_password = serializers.CharField()
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError("Passwords do not match.")
+        return attrs
 
 class OdooCredentialsSerializer(serializers.ModelSerializer):
     class Meta:
