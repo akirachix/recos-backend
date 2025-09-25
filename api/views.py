@@ -55,8 +55,15 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, permissions
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import AllowAny 
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
 
+code_storage = {}
 
 logger = logging.getLogger(__name__)
 
@@ -118,34 +125,22 @@ class VerifyCodeView(APIView):
         return Response({"detail": "Code verified, you may now reset your password."})
 
 
-
 class ResetPasswordView(APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [AllowAny] 
 
     def post(self, request):
         serializer = ResetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        new_password = serializer.validated_data['new_password']
-        confirm_password = serializer.validated_data['confirm_password']
-
-        if new_password != confirm_password:
-            return Response({"detail": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        email = request.session.get('reset_email')
-        if not email:
-            return Response({'detail': 'Session expired or invalid request.'}, status=status.HTTP_400_BAD_REQUEST)
-        
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
         try:
-            user = Recruiter.objects.get(email=email)
-        except Recruiter.DoesNotExist:
-            return Response({'detail': 'No user found.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user.set_password(new_password)
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({"detail": "User with this email does not exist."}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(password)
         user.save()
-        request.session.pop('reset_email', None)
-
+        code_storage.pop(email, None)
         return Response({"detail": "Password reset successful."})
-
 
 
 @api_view(['GET'])
