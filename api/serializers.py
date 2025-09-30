@@ -222,7 +222,8 @@ class JobSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'company': {'required': True},
-            'expired_at': {'required': False} 
+            'expired_at': {'required': False},
+            'generated_job_summary': {'read_only': True},
         }
 
 class CandidateSerializer(serializers.ModelSerializer):
