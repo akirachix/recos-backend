@@ -504,11 +504,21 @@ class JobViewSet(viewsets.ModelViewSet):
             try:
                 company = Company.objects.get(company_id=company_id, recruiter=self.request.user)
                 expired_at = self.request.data.get('expired_at', timezone.now() + timedelta(days=365))
-                serializer.save(company=company, expired_at=expired_at)
+                job_description = self.request.data.get('job_description', '')
+                generated_summary = generate_job_summary(job_description) if job_description else ''
+                serializer.save(company=company, expired_at=expired_at, generated_job_summary=generated_summary)
             except Company.DoesNotExist:
                 raise serializers.ValidationError("Company not found or doesn't belong to you")
         else:
             raise serializers.ValidationError("company_id is required")
+        
+    def perform_update(self, serializer):
+        job_description = self.request.data.get('job_description')
+        if job_description:
+            generated_summary = generate_job_summary(job_description)
+            serializer.save(generated_job_summary=generated_summary)
+        else:
+            serializer.save()
 
 
 class CandidateViewSet(viewsets.ModelViewSet):
