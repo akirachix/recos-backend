@@ -28,14 +28,14 @@ from interviewConversation.models import InterviewConversation
 from job.models import Job
 
 from api.serializers import (
-    InterviewConversationSerializer, 
-    JobSerializer, 
-    CandidateSerializer, 
+    InterviewConversationSerializer,
+    JobSerializer,
+    CandidateSerializer,
     InterviewSerializer,
-    RecruiterSerializer, 
-    OdooCredentialsSerializer, 
+    RecruiterSerializer,
+    OdooCredentialsSerializer,
     CompanySerializer,
-    AIReportSerializer, 
+    AIReportSerializer,
     AIReportCreateSerializer,
     InterviewCreateSerializer,
     InterviewListSerializer,
@@ -1012,12 +1012,14 @@ def sync_candidates_for_job(request, job_id):
     except Exception as e:
         return Response({'error': f'Failed to sync candidates: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['POST'])
+@api_view(['GET', 'POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_candidates_for_company(request, company_id):
     """Sync all candidates for a company (all jobs)"""
     try:
-        company = Company.objects.get(company_id=company_id, company__recruiter=request.user)
+        # company = Company.objects.get(company_id=company_id, company__recruiter=request.user)
+        company = Company.objects.get(company_id=company_id, recruiter=request.user)
+
     except Company.DoesNotExist:
         return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
     
@@ -1322,4 +1324,28 @@ class AIReportViewSet(viewsets.ModelViewSet):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="ai_report_{ai_report.report_id}.pdf"'
         return response
+    
 
+class SyncCandidatesForCompanyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, company_id):
+        # Return candidates for the company
+        candidates = Candidate.objects.filter(job__company__company_id=company_id, job__company__recruiter=request.user)
+        serializer = CandidateSerializer(candidates, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request, company_id):
+        try:
+            company = Company.objects.get(company_id=company_id, recruiter=request.user)
+        except Company.DoesNotExist:
+            return Response({'error': 'Company not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        synced_count = CandidateSyncService.sync_candidates_for_company(company)
+        candidates = Candidate.objects.filter(job__company=company)
+        serializer = CandidateSerializer(candidates, many=True)
+        return Response({
+            'message': f'Successfully synced {synced_count} candidates',
+            'candidates_count': candidates.count(),
+            'candidates': serializer.data
+        }, status=status.HTTP_200_OK)

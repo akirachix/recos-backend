@@ -1,5 +1,5 @@
 from rest_framework.routers import DefaultRouter
-from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet
+from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet, SyncCandidatesForCompanyView
 from django.urls import path,include
 from . import views
 
@@ -32,6 +32,7 @@ urlpatterns = [
     path('sync/candidates/job/<int:job_id>/', views.sync_candidates_for_job, name='sync_candidates_for_job'),
     path('sync/candidates/company/<int:company_id>/', views.sync_candidates_for_company, name='sync_candidates_for_company'),
     path('sync/candidates/all/', views.sync_all_candidates, name='sync_all_candidates'),
+    path('sync/candidates/company/<int:company_id>/', SyncCandidatesForCompanyView.as_view(), name='sync_candidates_for_company'),
     path('companies/<int:company_id>/jobs/', views.get_jobs_by_company, name='get_jobs_by_company'),
     path('candidates/<int:candidate_id>/attachments/', views.get_candidate_attachments, name='get_candidate_attachments'),
     path('sync/jobs/user/', views.sync_jobs_for_user, name='sync_jobs_for_user'),
