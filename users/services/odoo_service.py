@@ -112,6 +112,7 @@ class OdooService:
             'write',
             [[self.uid], {'company_id': company_id}]
         )
+        
     def get_jobs(self, company_id=None, user_id=None):
         domain = []
         if company_id:
