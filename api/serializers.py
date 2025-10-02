@@ -222,7 +222,8 @@ class JobSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'company': {'required': True},
-            'expired_at': {'required': False} 
+            'expired_at': {'required': False},
+            'generated_job_summary': {'read_only': True},
         }
 
 class CandidateSerializer(serializers.ModelSerializer):
@@ -240,19 +241,25 @@ class CandidateSerializer(serializers.ModelSerializer):
         read_only_fields = ['candidate_id', 'created_at', 'updated_at']
 
 class RecruiterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
-    
+    password = serializers.CharField(write_only=True, required=False)
     class Meta:
         model = Recruiter
         fields = ['id', 'first_name', 'last_name', 'email', 'password', 'image', 'created_at', 'updated_at']
-        extra_kwargs = {'password': {'write_only': True}}
-    
+        extra_kwargs = {'password': {'write_only': True, 'required': False}}
     def create(self, validated_data):
         password = validated_data.pop('password')
         user = Recruiter(**validated_data)
         user.set_password(password)
         user.save()
         return user
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -262,8 +269,14 @@ class VerifyCodeSerializer(serializers.Serializer):
     code = serializers.CharField()
 
 class ResetPasswordSerializer(serializers.Serializer):
-    new_password = serializers.CharField()
-    confirm_password = serializers.CharField()
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError("Passwords do not match.")
+        return attrs
 
 class OdooCredentialsSerializer(serializers.ModelSerializer):
     class Meta:

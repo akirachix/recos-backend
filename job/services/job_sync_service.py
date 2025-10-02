@@ -4,6 +4,7 @@ from companies.models import Company
 from job.models import Job
 from django.utils import timezone
 from datetime import timedelta
+from job.services.ai_service import generate_job_summary
 
 class JobSyncService:
     @staticmethod
@@ -29,7 +30,7 @@ class JobSyncService:
                     job_company_name = odoo_job['company_id'][1]
                 if job_company_name != company.company_name:
                     continue
-                #
+        
                 job_description = odoo_job.get('description', '')
                 generate_summary = generate_job_summary(job_description) if job_description else ''
                 job, created = Job.objects.update_or_create(
@@ -76,7 +77,6 @@ class JobSyncService:
                 if not job_company_name or job_company_name not in company_map:
                     continue
                 company = company_map[job_company_name]
-                 #
                 job_description = odoo_job.get('description', '')
                 generate_summary = generate_job_summary(job_description) if job_description else ''
                 job, created = Job.objects.update_or_create(
