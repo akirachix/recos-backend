@@ -26,6 +26,7 @@ from candidate.models import Candidate, CandidateAttachment
 from interview.models import Interview
 from interviewConversation.models import InterviewConversation
 from job.models import Job
+from job.services.ai_service import generate_job_summary
 
 from api.serializers import (
     InterviewConversationSerializer, 
