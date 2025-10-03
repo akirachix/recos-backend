@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-import dj_database_url
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,16 +21,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 DEBUG = os.getenv('DEBUG', default=False)
-if isinstance(DEBUG, bool):
-    pass
-else:
-    DEBUG = DEBUG.lower() in ('true', '1', 't')
-if DEBUG:
-    CORS_ALLOWS_ALL_ORIGINS = True
-else:
-    CORS_ALLOWED_ORIGINS=[]
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["*"]
 
 
 INSTALLED_APPS = [
@@ -84,11 +75,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recos.wsgi.application"
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default='sqlite:///' + os.path.join(BASE_DIR, 'db.sqlite3')
-    )
-}
+if not os.getenv("DATABASE_URL"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -105,9 +98,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-
-
 LANGUAGE_CODE = "en-us"
 
 TIME_ZONE = "UTC"
@@ -115,9 +105,6 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 
 USE_TZ = True
-
-
-
 
 STATIC_URL = "static/"
 
@@ -127,9 +114,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 ODOO_API_ENCRYPTION_KEY = os.getenv('ODOO_API_ENCRYPTION_KEY')
-
-if not ODOO_API_ENCRYPTION_KEY or len(ODOO_API_ENCRYPTION_KEY) < 16:
-    raise ValueError("ODOO_API_ENCRYPTION_KEY must be set and be at least 16 characters long")
 
 AUTH_USER_MODEL = 'users.Recruiter'
 
@@ -141,11 +125,6 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
 
 AUTHENTICATION_BACKENDS = [
     'users.backends.EmailBackend', 

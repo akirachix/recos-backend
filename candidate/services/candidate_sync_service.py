@@ -51,13 +51,11 @@ class CandidateSyncService:
                     
                     synced_candidates.append(candidate)
                 except Exception as e:
-                    print(f"Error processing candidate {odoo_candidate.get('id')}: {str(e)}")
                     continue
             
             return synced_candidates
             
         except Exception as e:
-            print(f"Error syncing candidates for job {job.job_title}: {str(e)}")
             raise
 
     @staticmethod
@@ -168,13 +166,11 @@ class CandidateSyncService:
                     synced_count += 1
                     
                 except Exception as e:
-                    print(f"Error processing candidate {odoo_candidate.get('id')}: {str(e)}")
                     continue
             
             return synced_count
             
         except Exception as e:
-            print(f"Error syncing candidates for company {company.company_name}: {str(e)}")
             raise
 
     @staticmethod
@@ -206,15 +202,12 @@ class CandidateSyncService:
                 try:
                     synced_count = CandidateSyncService.sync_candidates_for_company(company, odoo_service)
                     total_synced += synced_count
-                    print(f"Synced {synced_count} candidates for company {company.company_name}")
                 except Exception as e:
-                    print(f"Error syncing candidates for company {company.company_name}: {str(e)}")
                     continue
             
             return total_synced
             
         except Exception as e:
-            print(f"Error syncing all candidates for recruiter {recruiter.email}: {str(e)}")
             raise
     
     @staticmethod

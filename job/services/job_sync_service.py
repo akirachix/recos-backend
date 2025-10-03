@@ -57,7 +57,6 @@ class JobSyncService:
             
             return synced_jobs
         except Exception as e:
-            print(f"Error syncing jobs for company {company.company_name}: {str(e)}")
             raise
 
     @staticmethod
@@ -117,5 +116,4 @@ class JobSyncService:
             
             return synced_jobs
         except Exception as e:
-            print(f"Error syncing jobs for user {recruiter.email}: {str(e)}")
             raise

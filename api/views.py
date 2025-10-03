@@ -716,15 +716,10 @@ def reset_company_sequence(request):
 def get_companies(request):
     try:
         recruiter = request.user
-        print(f"Fetching companies for recruiter: {recruiter.email} (ID: {recruiter.id})")
         companies = Company.objects.filter(recruiter=recruiter)
-        print(f"Found {companies.count()} companies in database for this recruiter")
-        for company in companies:
-            print(f"Company ID: {company.company_id}, Name: {company.company_name}")
         serializer = CompanySerializer(companies, many=True)
         return Response(serializer.data)
     except Exception as e:
-        print(f"Error in get_companies: {str(e)}")
         return Response({'error': f'Failed to retrieve companies: {str(e)}'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
@@ -765,31 +760,24 @@ def add_odoo_credentials(request):
     )
     try:
         odoo_companies = odoo_service.get_user_companies()
-        print(f"Found {len(odoo_companies)} companies in Odoo for user {request.user.email}")
         existing_companies = Company.objects.filter(recruiter=request.user)
-        print(f"Found {existing_companies.count()} existing companies for this recruiter")
         created_companies = []
         for odoo_company in odoo_companies:
-            print(f"Processing Odoo company: {odoo_company}")
             company_name = odoo_company['name']
             existing_company = existing_companies.filter(company_name=company_name).first()
             if existing_company:
-                print(f"Found existing company by name: {existing_company.company_name} (ID: {existing_company.company_id})")
                 existing_company.odoo_credentials = credentials
                 existing_company.save()
                 created_companies.append(existing_company)
             else:
-                print(f"Creating new company: {company_name}")
                 comp = Company.objects.create(
                     company_name=company_name,
                     recruiter=request.user,
                     odoo_credentials=credentials,
                     is_active=True
                 )
-                print(f"Created new company with ID: {comp.company_id}")
                 created_companies.append(comp)
     except Exception as e:
-        print(f"Error syncing companies: {str(e)}")
         return Response({'error': f'Failed to retrieve companies: {str(e)}'},
                         status=status.HTTP_400_BAD_REQUEST)
     serializer = OdooCredentialsSerializer(credentials)
@@ -1094,8 +1082,7 @@ def sync_all_data(request):
                     synced_candidates = CandidateSyncService.sync_candidates_for_job(job)
                     all_candidates.extend(synced_candidates)
                 except Exception as e:
-                    print(f"Error syncing candidates for job {job.job_title}: {str(e)}")
-        
+                    raise Exception(f'Failed to sync candidates for job {job.job_title}: {str(e)}')
         companies_data = CompanySerializer(synced_companies, many=True).data
         candidates_data = CandidateSerializer(all_candidates, many=True).data
         
