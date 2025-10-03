@@ -8,8 +8,18 @@ from .utils import extract_text_from_file
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
+def get_genai_client():
+    try:
+        api_key = getattr(settings, 'GEMINI_API_KEY', None)
+        if not api_key:
+            logger.error("GEMINI_API_KEY is not configured in settings")
+            return None
+            
+        return genai.Client(api_key=api_key)
+    except Exception as e:
+        logger.error(f"Failed to initialize GenAI client: {str(e)}")
+        return None
+    
 def generate_candidate_skill_summary(candidate):
     """
     Generate a skill summary for a candidate based on their resume attachments
@@ -27,6 +37,11 @@ def generate_candidate_skill_summary(candidate):
         
         if not resume_text.strip():
             return "No resume text available for skill extraction."
+        
+        client = get_genai_client()
+        if not client:
+            return "AI service is not available. Please check API configuration."
+        
         
         prompt = f"""
         Analyze this candidate's resume and extract a comprehensive skill summary relevant to the job they're applying for.

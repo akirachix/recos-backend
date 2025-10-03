@@ -6,8 +6,18 @@ import json
 
 logger = logging.getLogger(__name__)
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
+def get_genai_client():
+    try:
+        api_key = getattr(settings, 'GEMINI_API_KEY', None)
+        if not api_key:
+            logger.error("GEMINI_API_KEY is not configured in settings")
+            return None
+            
+        return genai.Client(api_key=api_key)
+    except Exception as e:
+        logger.error(f"Failed to initialize GenAI client: {str(e)}")
+        return None
+    
 def generate_job_summary(job_description):
     """
     Generate a concise job summary using Google's Generative AI
@@ -15,6 +25,10 @@ def generate_job_summary(job_description):
     try:
         if not job_description or len(job_description.strip()) < 10:
             return "Job description is too short to generate a summary."
+        
+        client = get_genai_client()
+        if not client:
+            return "AI service is not available. Please check API configuration."
         
         prompt = f"""
         Please generate a concise and professional job summary based on the following job description.
