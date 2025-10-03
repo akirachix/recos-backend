@@ -8,6 +8,7 @@ import mimetypes
 import os
 from job.models import Job 
 from datetime import timezone, timedelta
+from candidate.services.ai_service import generate_candidate_skill_summary
 
 class CandidateSyncService:
     @staticmethod
@@ -42,6 +43,11 @@ class CandidateSyncService:
                     candidate = CandidateSyncService._process_single_candidate(odoo_candidate, job)
                     
                     CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
+
+                    if candidate.attachments.exists():
+                        skill_summary = generate_candidate_skill_summary(candidate)
+                        candidate.generated_skill_summary = skill_summary
+                        candidate.save()
                     
                     synced_candidates.append(candidate)
                 except Exception as e:
@@ -245,12 +251,23 @@ class CandidateSyncService:
                 res_id=candidate.odoo_candidate_id
             )
             
+            has_new_attachments = False
             
             for attachment_data in attachments:
                 try:
-                    CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
+                    if not CandidateAttachment.objects.filter(
+                        candidate=candidate, 
+                        odoo_attachment_id=attachment_data['id']
+                    ).exists():
+                        CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
+                        has_new_attachments = True
                 except Exception as e:
-                    continue
+                    continue   
+
+            if has_new_attachments:
+                skill_summary = generate_candidate_skill_summary(candidate)
+                candidate.generated_skill_summary = skill_summary
+                candidate.save()
             
         except Exception as e:
             return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"
@@ -324,6 +341,12 @@ class CandidateSyncService:
                 original_filename=attachment_name 
             )
             attachment.save()
+        try:
+            skill_summary = generate_candidate_skill_summary(candidate)
+            candidate.generated_skill_summary = skill_summary
+            candidate.save()
+        except Exception as e:
+            return f"Failed to regenerate skill summary after adding attachment: {str(e)}"
 
     @staticmethod
     def _get_file_extension(mimetype, original_filename):
