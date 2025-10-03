@@ -138,24 +138,11 @@ AUTHENTICATION_BACKENDS = [
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST')
-if not EMAIL_HOST:
-    raise ValueError("EMAIL_HOST environment variable is not set")
-
 EMAIL_PORT = os.getenv('EMAIL_PORT')
-if not EMAIL_PORT:
-    raise ValueError("EMAIL_PORT environment variable is not set")
 EMAIL_PORT = int(EMAIL_PORT)
-
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 't')
-
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
-if not EMAIL_HOST_USER:
-    raise ValueError("EMAIL_HOST_USER environment variable is not set")
-
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-if not EMAIL_HOST_PASSWORD:
-    raise ValueError("EMAIL_HOST_PASSWORD environment variable is not set")
-
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@recos.com')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 SITE_NAME = 'Recos'
