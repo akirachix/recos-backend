@@ -12,7 +12,7 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()
     preview_url = serializers.SerializerMethodField()
     file_type_display = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = CandidateAttachment
         fields = [
@@ -21,18 +21,18 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
             'file_type_display', 'file_size', 'sync_status', 'created_at'
         ]
         read_only_fields = ['attachment_id', 'created_at']
-    
+
     def get_file_url(self, obj):
         if obj.file:
             return obj.file.url
         return None
-    
+
     def get_download_url(self, obj):
         return f"/api/candidate-attachments/{obj.attachment_id}/download/"
-    
+
     def get_preview_url(self, obj):
         return f"/api/candidate-attachments/{obj.attachment_id}/preview/"
-    
+
     def get_file_type_display(self, obj):
         if obj.is_pdf():
             return "PDF Document"
@@ -44,6 +44,7 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
             return "Spreadsheet"
         else:
             return "File"
+
 
 class InterviewConversationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -229,6 +230,7 @@ class JobSerializer(serializers.ModelSerializer):
 class CandidateSerializer(serializers.ModelSerializer):
     job_title = serializers.CharField(source='job.job_title', read_only=True)
     company_name = serializers.CharField(source='job.company.company_name', read_only=True)
+    attachments = CandidateAttachmentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Candidate
@@ -236,7 +238,7 @@ class CandidateSerializer(serializers.ModelSerializer):
             'candidate_id', 'job', 'job_title', 'company_name', 'odoo_candidate_id',
             'name', 'email', 'phone', 'generated_skill_summary', 'state',
             'partner_id', 'date_open', 'date_last_stage_update',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'attachments'
         ]
         read_only_fields = ['candidate_id', 'created_at', 'updated_at']
 
