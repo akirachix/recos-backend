@@ -12,7 +12,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
-import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,7 +23,6 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 DEBUG = os.getenv('DEBUG', default=False)
 
 ALLOWED_HOSTS = ["*"]
-
 
 
 INSTALLED_APPS = [
@@ -45,7 +43,6 @@ INSTALLED_APPS = [
     'companies',
     "ai_reports",
     "interview",
-    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -57,7 +54,6 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    'whitenoise.middleware.WhiteNoiseMiddleware',
 ]
 
 ROOT_URLCONF = "recos.urls"
@@ -79,17 +75,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recos.wsgi.application"
 
-DATABASES = {
-    "default": dj_database_url.config(default=os.getenv("DATABASE_URL"))
-}
-if not os.getenv("DATABASE_URL"):
+if os.getenv("DATABASE_URL"):
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.parse(os.getenv("DATABASE_URL"))
+    }
+else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": BASE_DIR / "db.sqlite3",
         }
     }
-
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -106,9 +103,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-
-
 LANGUAGE_CODE = "en-us"
 
 TIME_ZONE = "UTC"
@@ -117,12 +111,8 @@ USE_I18N = True
 
 USE_TZ = True
 
+STATIC_URL = "static/"
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATIC_URL = '/static/'
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, 'static'),
-)
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -141,10 +131,6 @@ REST_FRAMEWORK = {
     ],
 }
 
-
-MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
-
 AUTHENTICATION_BACKENDS = [
     'users.backends.EmailBackend', 
     'django.contrib.auth.backends.ModelBackend',
@@ -152,15 +138,12 @@ AUTHENTICATION_BACKENDS = [
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST')
-EMAIL_PORT = os.getenv('EMAIL_PORT')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))  
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() in ('true', '1', 't')
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
-
-
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@recos.com')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 SITE_NAME = 'Recos'
 PASSWORD_RESET_TIMEOUT = 3600
-
-CORS_ORIGIN_ALLOW_ALL = True
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')

@@ -6,6 +6,9 @@ from candidate.models import Candidate, CandidateAttachment
 from django.core.files.base import ContentFile
 import mimetypes
 import os
+from job.models import Job 
+from datetime import timezone, timedelta
+from candidate.services.ai_service import generate_candidate_skill_summary
 
 class CandidateSyncService:
     @staticmethod
@@ -32,14 +35,19 @@ class CandidateSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
             
-            odoo_candidates = odoo_service.get_candidates(job_id=job.odoo_job_id)
-            
+            odoo_candidates = odoo_service.get_candidates(job_id=job.job_id)
+
             synced_candidates = []
             for odoo_candidate in odoo_candidates:
                 try:
                     candidate = CandidateSyncService._process_single_candidate(odoo_candidate, job)
                     
                     CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
+
+                    if candidate.attachments.exists():
+                        skill_summary = generate_candidate_skill_summary(candidate)
+                        candidate.generated_skill_summary = skill_summary
+                        candidate.save()
                     
                     synced_candidates.append(candidate)
                 except Exception as e:
@@ -67,28 +75,21 @@ class CandidateSyncService:
         candidate_data = {
             'name': candidate_name,  
             'email': odoo_candidate.get('email_from', ''),
+            'phone': odoo_candidate.get('phone', '') or odoo_candidate.get('partner_phone', ''),
             'state': state,
         }
         
-        if hasattr(Candidate, 'phone'):
-            candidate_data['phone'] = odoo_candidate.get('phone', '') or odoo_candidate.get('partner_phone', '')
+        partner_id_data = odoo_candidate.get('partner_id', [False])
+        if isinstance(partner_id_data, list) and len(partner_id_data) > 0:
+            candidate_data['partner_id'] = partner_id_data[0]
         
-        if hasattr(Candidate, 'partner_id'):
-            partner_id_data = odoo_candidate.get('partner_id', [False])
-            if isinstance(partner_id_data, list) and len(partner_id_data) > 0:
-                candidate_data['partner_id'] = partner_id_data[0]
-            else:
-                candidate_data['partner_id'] = None
+        candidate_data['date_open'] = CandidateSyncService._parse_odoo_date(
+            odoo_candidate.get('date_open')
+        )
         
-        if hasattr(Candidate, 'date_open'):
-            candidate_data['date_open'] = CandidateSyncService._parse_odoo_date(
-                odoo_candidate.get('date_open')
-            )
-        
-        if hasattr(Candidate, 'date_last_stage_update'):
-            candidate_data['date_last_stage_update'] = CandidateSyncService._parse_odoo_date(
-                odoo_candidate.get('date_last_stage_update')
-            )
+        candidate_data['date_last_stage_update'] = CandidateSyncService._parse_odoo_date(
+            odoo_candidate.get('date_last_stage_update')
+        )
         
         candidate, created = Candidate.objects.update_or_create(
             job=job,
@@ -97,6 +98,117 @@ class CandidateSyncService:
         )
         
         return candidate
+
+    @staticmethod
+    def sync_candidates_for_company(company, odoo_service=None):
+        """Sync all candidates for a company (all jobs)"""
+        try:
+            if not odoo_service:
+                recruiter = company.recruiter
+                odoo_creds = OdooCredentials.objects.filter(
+                    recruiter=recruiter
+                ).order_by('-created_at').first()
+                
+                if not odoo_creds:
+                    raise ValueError("No Odoo credentials found for this recruiter")
+                
+                odoo_service = OdooService(
+                    db_url=odoo_creds.db_url,
+                    db_name=odoo_creds.db_name,
+                    email=odoo_creds.email_address,
+                    api_key=odoo_creds.get_api_key()
+                )
+                
+                if not odoo_service.authenticate():
+                    raise Exception("Failed to authenticate with Odoo")
+            
+            company_jobs = Job.objects.filter(company=company)
+            job_titles = [job.job_title for job in company_jobs]
+            
+            odoo_candidates = odoo_service.get_candidates(company_id=company.odoo_company_id)
+            
+            synced_count = 0
+            for odoo_candidate in odoo_candidates:
+                try:
+                    job_id_data = odoo_candidate.get('job_id', [False, 'Unknown Job'])
+                    if isinstance(job_id_data, list) and len(job_id_data) > 1:
+                        job_title = job_id_data[1]
+                    else:
+                        job_title = 'Unknown Job'
+                    
+                    matching_job = None
+                    for job in company_jobs:
+                        if job.job_title == job_title:
+                            matching_job = job
+                            break
+                    
+                    if not matching_job:
+                        for job in company_jobs:
+                            if job_title.lower() in job.job_title.lower() or job.job_title.lower() in job_title.lower():
+                                matching_job = job
+                                break
+                    
+                    if not matching_job:
+                        matching_job, created = Job.objects.get_or_create(
+                            company=company,
+                            job_title=job_title,
+                            defaults={
+                                'job_description': f"Auto-created for candidate sync: {job_title}",
+                                'state': 'open',
+                                'expired_at': timezone.now() + timedelta(days=365)
+                            }
+                        )
+                        company_jobs = Job.objects.filter(company=company)  
+                    
+                    candidate = CandidateSyncService._process_single_candidate(odoo_candidate, matching_job)
+                    CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
+                    
+                    synced_count += 1
+                    
+                except Exception as e:
+                    continue
+            
+            return synced_count
+            
+        except Exception as e:
+            raise
+
+    @staticmethod
+    def sync_all_candidates_for_recruiter(recruiter):
+        """Sync candidates for all companies of a recruiter"""
+        try:
+            odoo_creds = OdooCredentials.objects.filter(
+                recruiter=recruiter
+            ).order_by('-created_at').first()
+            
+            if not odoo_creds:
+                raise ValueError("No Odoo credentials found for this recruiter")
+            
+            odoo_service = OdooService(
+                db_url=odoo_creds.db_url,
+                db_name=odoo_creds.db_name,
+                email=odoo_creds.email_address,
+                api_key=odoo_creds.get_api_key()
+            )
+            
+            if not odoo_service.authenticate():
+                raise Exception("Failed to authenticate with Odoo")
+            
+            from companies.models import Company
+            companies = Company.objects.filter(recruiter=recruiter)
+            
+            total_synced = 0
+            for company in companies:
+                try:
+                    synced_count = CandidateSyncService.sync_candidates_for_company(company, odoo_service)
+                    total_synced += synced_count
+                except Exception as e:
+                    continue
+            
+            return total_synced
+            
+        except Exception as e:
+            raise
     
     @staticmethod
     def _map_odoo_stage(odoo_stage_name):
@@ -124,64 +236,6 @@ class CandidateSyncService:
             return None
     
     @staticmethod
-    def sync_candidates_for_company(company, odoo_service=None):
-        """Sync all candidates for a company (all jobs)"""
-        try:
-            
-            if not odoo_service:
-                recruiter = company.recruiter
-                odoo_creds = OdooCredentials.objects.filter(
-                    recruiter=recruiter
-                ).order_by('-created_at').first()
-                
-                if not odoo_creds:
-                    raise ValueError("No Odoo credentials found for this recruiter")
-                
-                odoo_service = OdooService(
-                    db_url=odoo_creds.db_url,
-                    db_name=odoo_creds.db_name,
-                    email=odoo_creds.email_address,
-                    api_key=odoo_creds.get_api_key()
-                )
-                
-                if not odoo_service.authenticate():
-                    raise Exception("Failed to authenticate with Odoo")
-            
-            odoo_candidates = odoo_service.get_candidates(company_id=company.odoo_company_id)
-            
-            synced_count = 0
-            for odoo_candidate in odoo_candidates:
-                try:
-                    job_id_data = odoo_candidate.get('job_id', [False])
-                    if isinstance(job_id_data, list) and len(job_id_data) > 0:
-                        odoo_job_id = job_id_data[0]
-                        job_name = job_id_data[1] if len(job_id_data) > 1 else 'Unknown Job'
-                    else:
-                        odoo_job_id = None
-                    
-                    if odoo_job_id:
-                        from job.models import Job
-                        job, created = Job.objects.get_or_create(
-                            company=company,
-                            odoo_job_id=odoo_job_id,
-                            defaults={
-                                'job_title': job_name,
-                                'job_description': '',
-                                'state': 'open'
-                            }
-                        )
-                        
-                        CandidateSyncService.sync_candidates_for_job(job, odoo_service)
-                        synced_count += 1
-                        
-                except Exception as e:
-                    continue
-            
-            
-        except Exception as e:
-            raise
-    
-    @staticmethod
     def sync_attachments_for_candidate(candidate, odoo_service):
         """Sync attachments for a single candidate"""
         try:
@@ -190,12 +244,23 @@ class CandidateSyncService:
                 res_id=candidate.odoo_candidate_id
             )
             
+            has_new_attachments = False
             
             for attachment_data in attachments:
                 try:
-                    CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
+                    if not CandidateAttachment.objects.filter(
+                        candidate=candidate, 
+                        odoo_attachment_id=attachment_data['id']
+                    ).exists():
+                        CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
+                        has_new_attachments = True
                 except Exception as e:
-                    continue
+                    continue   
+
+            if has_new_attachments:
+                skill_summary = generate_candidate_skill_summary(candidate)
+                candidate.generated_skill_summary = skill_summary
+                candidate.save()
             
         except Exception as e:
             return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"
@@ -269,6 +334,12 @@ class CandidateSyncService:
                 original_filename=attachment_name 
             )
             attachment.save()
+        try:
+            skill_summary = generate_candidate_skill_summary(candidate)
+            candidate.generated_skill_summary = skill_summary
+            candidate.save()
+        except Exception as e:
+            return f"Failed to regenerate skill summary after adding attachment: {str(e)}"
 
     @staticmethod
     def _get_file_extension(mimetype, original_filename):
