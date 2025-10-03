@@ -8,14 +8,14 @@ from .models import Company
 class CompanyModelTests(TestCase):
     def setUp(self):
         self.recruiter = Recruiter.objects.create_user(
-            email='test@example.com',
+            email='jerry@gmail.com',
             first_name='Jerry',
             last_name='Dawit',
             password='testpass123'
         )
 
         self.recruiter2 = Recruiter.objects.create_user(
-            email='another@example.com',
+            email='rahwa@gamil.com',
             first_name='Rahwa',
             last_name='Belay',
             password='testpass123'
