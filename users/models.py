@@ -132,7 +132,6 @@ class OdooCredentials(models.Model):
             
             return decrypted_data.decode('utf-8')
         except Exception as e:
-            print(f"Error decrypting API key: {str(e)}")
             return ""
     
     def get_api_key(self):

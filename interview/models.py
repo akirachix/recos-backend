@@ -2,35 +2,47 @@ from django.db import models
 from candidate.models import Candidate
 from users.models import Recruiter
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
+from datetime import timedelta
 
 class Interview(models.Model):  
+    STATUS_SCHEDULED = 'scheduled'
+    STATUS_IN_PROGRESS = 'in_progress'
+    STATUS_COMPLETED = 'completed'
+    STATUS_CANCELED = 'canceled'
+
     STATUS_CHOICES = [
-        ('scheduled', 'Scheduled'),
-        ('in_progress', 'In Progress'),
-        ('completed', 'Completed'),
-        ('canceled', 'Canceled'),
+        (STATUS_SCHEDULED, 'Scheduled'),
+        (STATUS_IN_PROGRESS, 'In Progress'),
+        (STATUS_COMPLETED, 'Completed'),
+        (STATUS_CANCELED, 'Canceled'),
     ]
-    
+
+    interview_id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='interviews')
     recruiter = models.ForeignKey(Recruiter, on_delete=models.CASCADE, related_name='interviews')
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     scheduled_at = models.DateTimeField()
-    duration = models.IntegerField(
+    duration = models.PositiveIntegerField(
         default=60, 
         help_text="Duration in minutes",
         validators=[MinValueValidator(15), MaxValueValidator(480)] 
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='scheduled')
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_SCHEDULED
+    )
     interview_link = models.URLField(blank=True, null=True)
     google_event_id = models.CharField(max_length=255, blank=True, null=True)
     google_calendar_link = models.URLField(blank=True, null=True)
     send_calendar_invite = models.BooleanField(default=True)
-    required_preparation = models.TextField(blank=True, null=True, help_text="Preparation materials for candidate")    
+    required_preparation = models.TextField(
+        blank=True, null=True, help_text="Preparation materials for candidate"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(blank=True, null=True)
-    
+
     class Meta:
         ordering = ['-scheduled_at']
         indexes = [
@@ -44,24 +56,18 @@ class Interview(models.Model):
     
     @property
     def is_upcoming(self):
-        from django.utils import timezone
-        return self.status == 'scheduled' and self.scheduled_at > timezone.now()
+        return self.status == self.STATUS_SCHEDULED and self.scheduled_at > timezone.now()
     
     @property
     def end_time(self):
-        from datetime import timedelta
         return self.scheduled_at + timedelta(minutes=self.duration)
     
     def save(self, *args, **kwargs):
-        from django.utils import timezone
         now = timezone.now()
-        
-        if self.status == 'scheduled' and self.scheduled_at <= now:
-            self.status = 'in_progress'
-        
-        if self.status == 'in_progress' and self.end_time <= now:
-            self.status = 'completed'
+        if self.status == self.STATUS_SCHEDULED and self.scheduled_at <= now:
+            self.status = self.STATUS_IN_PROGRESS
+        if self.status == self.STATUS_IN_PROGRESS and self.end_time <= now:
+            self.status = self.STATUS_COMPLETED
             if not self.completed_at:
                 self.completed_at = now
-        
         super().save(*args, **kwargs)
