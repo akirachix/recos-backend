@@ -31,7 +31,7 @@ def save_base64_attachment(candidate, attachment_data):
             file_type=mimetype,
             file_size=len(file_content)
         )
-        
+
         attachment.file.save(safe_filename, ContentFile(file_content))
         attachment.save()
         
