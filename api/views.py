@@ -27,7 +27,7 @@ from interview.models import Interview
 from interviewConversation.models import InterviewConversation
 from job.models import Job
 from job.services.ai_service import generate_job_summary
-
+from candidate.services.ai_service import generate_candidate_skill_summary
 from api.serializers import (
     InterviewConversationSerializer, 
     JobSerializer, 
@@ -533,15 +533,31 @@ class CandidateViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(job_id=job_id)
         return queryset
     
-    def perform_create(self, serializer):
-        job_ids = self.request.data.get('jobs', [])
-        if not job_ids:
-            raise serializer.ValidationError("Candidates must be linked to at least one job.")
         
+    def perform_create(self, serializer):
+        job_id = self.request.data.get('job')
+        if not job_id:
+            raise serializers.ValidationError("Job ID is required")
+        
+        try:
+            job = Job.objects.get(job_id=job_id, company__recruiter=self.request.user)
+        except Job.DoesNotExist:
+            raise serializers.ValidationError("Job not found or doesn't belong to you")
+        
+        candidate = serializer.save(job=job)
+        
+        if candidate.attachments.exists():
+            skill_summary = generate_candidate_skill_summary(candidate)
+            candidate.generated_skill_summary = skill_summary
+            candidate.save()
+    
+    def perform_update(self, serializer):
         candidate = serializer.save()
         
-        jobs = Job.objects.filter(id__in=job_ids)
-        candidate.jobs.add(*jobs)
+        if candidate.attachments.exists():
+            skill_summary = generate_candidate_skill_summary(candidate)
+            candidate.generated_skill_summary = skill_summary
+            candidate.save()
 
 
 class RecruiterRegistrationView(generics.CreateAPIView):
