@@ -36,10 +36,8 @@ class OdooService:
                 self.session = "authenticated"
                 return True
             else:
-                print(f"Authentication failed. Response: {result}")
                 return False
         except Exception as e:
-            print(f"Authentication failed: {str(e)}")
             return False
     def call_odoo(self, model, method, args=None, kwargs=None):
         if not self.uid:
@@ -112,22 +110,39 @@ class OdooService:
             'write',
             [[self.uid], {'company_id': company_id}]
         )
-    def get_jobs(self, company_id=None):
+        
+    def get_jobs(self, company_id=None, user_id=None):
         domain = []
         if company_id:
             domain.append(('company_id', '=', company_id))
+        if user_id:
+            domain.append(('user_id', '=', user_id))
+        
         return self.call_odoo(
-            'hr.job',
-            'search_read',
-            [domain],
-            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment']}
+            'hr.job', 
+            'search_read', 
+            [domain], 
+            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment','create_date']}
         )
+    
+    def get_jobs_by_user(self, user_id):
+    
+        domain = [('user_id', '=', user_id)]
+        
+        return self.call_odoo(
+            'hr.job', 
+            'search_read', 
+            [domain], 
+            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment','create_date']}
+        )
+    
     def get_candidates(self, job_id=None, company_id=None):
         domain = []
         if job_id:
             domain.append(('job_id', '=', job_id))
-        elif company_id:
+        if company_id:
             domain.append(('company_id', '=', company_id))
+
         fields = [
             'id',
             'partner_name',
@@ -141,15 +156,13 @@ class OdooService:
             'create_date',
             'department_id',
         ]
-        try:
-            return self.call_odoo(
-                'hr.applicant',
-                'search_read',
-                [domain],
-                {'fields': fields}
-            )
-        except Exception as e:
-            raise
+        return self.call_odoo(
+            'hr.applicant',
+            'search_read',
+            [domain],
+            {'fields': fields}
+        )
+
     def get_user_info(self):
         return self.call_odoo(
             'res.users',
