@@ -1,13 +1,11 @@
 from rest_framework import serializers
 from interview.models import Interview
 from interviewConversation.models import InterviewConversation
-from job.models import  Job
+from job.models import Job
 from candidate.models import Candidate, CandidateAttachment
-from django.contrib.auth import get_user_model
 from users.models import OdooCredentials, Recruiter
 from companies.models import Company
 from ai_reports.models import AIReport
-from rest_framework import serializers
 
 class CandidateAttachmentSerializer(serializers.ModelSerializer):
     file_url = serializers.SerializerMethodField()
@@ -88,18 +86,15 @@ class InterviewSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'scheduled_at': 'Interview must be scheduled for a future time.'
                 })
-        
         return data
     
     def validate_scheduled_at(self, value):
-        """Validate scheduled_at field"""
         from django.utils import timezone
         if value <= timezone.now():
             raise serializers.ValidationError("Interview must be scheduled for a future time.")
         return value
     
     def validate_duration(self, value):
-        """Validate duration field"""
         if value < 15:
             raise serializers.ValidationError("Interview duration must be at least 15 minutes.")
         if value > 480:
@@ -107,50 +102,38 @@ class InterviewSerializer(serializers.ModelSerializer):
         return value
     
 class InterviewCreateSerializer(InterviewSerializer):
-    """Serializer specifically for creating interviews with additional validation"""
-    
     class Meta(InterviewSerializer.Meta):
         read_only_fields = InterviewSerializer.Meta.read_only_fields + [
             'status', 'result'  
         ]
     
     def validate(self, data):
-        """Additional validation for creation"""
         data = super().validate(data)
-        
         if self.instance is None and 'candidate' not in data:
             raise serializers.ValidationError({
                 'candidate': 'This field is required when creating an interview.'
             })
-        
         if self.instance is None and 'recruiter' not in data:
             raise serializers.ValidationError({
                 'recruiter': 'This field is required when creating an interview.'
             })
-        
         if self.instance is None:
             data['status'] = 'draft'
-        
         return data
     
     def create(self, validated_data):
         if 'recruiter' not in validated_data:
             validated_data['recruiter'] = self.context['request'].user
-        
         return super().create(validated_data)
 
 class InterviewUpdateSerializer(InterviewSerializer):
-    """Serializer specifically for updating interviews"""
-    
     class Meta(InterviewSerializer.Meta):
         read_only_fields = InterviewSerializer.Meta.read_only_fields + [
             'candidate',  'recruiter'
         ]
     
     def validate(self, data):
-        """Additional validation for updates"""
         data = super().validate(data)
-        
         if self.instance and self.instance.status != 'draft':
             restricted_fields = ['candidate', 'recruiter']
             for field in restricted_fields:
@@ -158,11 +141,9 @@ class InterviewUpdateSerializer(InterviewSerializer):
                     raise serializers.ValidationError({
                         field: f'Cannot change {field} after interview is scheduled.'
                     })
-        
         return data
 
 class InterviewListSerializer(serializers.ModelSerializer):
-    """Simplified serializer for list views"""
     candidate_name = serializers.CharField(source='candidate.name', read_only=True)
     job_title = serializers.CharField(source='job.job_title', read_only=True)
     company_name = serializers.CharField(source='company.company_name', read_only=True)
@@ -176,7 +157,6 @@ class InterviewListSerializer(serializers.ModelSerializer):
         ]
 
 class InterviewCalendarSerializer(serializers.ModelSerializer):
-    """Serializer for calendar views"""
     title = serializers.CharField(read_only=True)
     start = serializers.DateTimeField(source='scheduled_at', read_only=True)
     end = serializers.SerializerMethodField(read_only=True)
@@ -195,7 +175,6 @@ class InterviewCalendarSerializer(serializers.ModelSerializer):
         return obj.end_time
 
 class InterviewCandidateChoiceSerializer(serializers.ModelSerializer):
-    """Serializer for candidate dropdown choices"""
     value = serializers.IntegerField(source='candidate_id')
     label = serializers.SerializerMethodField()
     
@@ -207,7 +186,6 @@ class InterviewCandidateChoiceSerializer(serializers.ModelSerializer):
         return f"{obj.name} - {obj.email} - {obj.job.job_title}"
 
 class InterviewJobChoiceSerializer(serializers.ModelSerializer):
-    """Serializer for job dropdown choices"""
     value = serializers.IntegerField(source='job_id')
     label = serializers.CharField(source='job_title')
     
@@ -216,7 +194,6 @@ class InterviewJobChoiceSerializer(serializers.ModelSerializer):
         fields = ['value', 'label']
 
 class InterviewCompanyChoiceSerializer(serializers.ModelSerializer):
-    """Serializer for company dropdown choices"""
     value = serializers.IntegerField(source='company_id')
     label = serializers.CharField(source='company_name')
     
@@ -224,24 +201,35 @@ class InterviewCompanyChoiceSerializer(serializers.ModelSerializer):
         model = Company
         fields = ['value', 'label']
 
-
 class JobSerializer(serializers.ModelSerializer):
     company_name = serializers.CharField(source='company.company_name', read_only=True)
+    company_id = serializers.IntegerField(source='company.company_id', read_only=True)
     
     class Meta:
         model = Job
         fields = [
-            'job_id', 'company', 'company_name', 'odoo_job_id', 'job_title',
-            'job_description', 'generated_job_summary', 'state', 'posted_at',
-            'expired_at', 'created_at', 'updated_at'
+            'job_id', 
+            'company', 
+            'company_name', 
+            'company_id',
+            'job_title', 
+            'job_description', 
+            'generated_job_summary', 
+            'state', 
+            'posted_at', 
+            'expired_at',  
+            'created_at'
         ]
-        read_only_fields = ['job_id', 'created_at', 'updated_at']
-
+        extra_kwargs = {
+            'company': {'required': True},
+            'expired_at': {'required': False},
+            'generated_job_summary': {'read_only': True},
+        }
 
 class CandidateSerializer(serializers.ModelSerializer):
     job_title = serializers.CharField(source='job.job_title', read_only=True)
     company_name = serializers.CharField(source='job.company.company_name', read_only=True)
-    
+
     class Meta:
         model = Candidate
         fields = [
@@ -250,23 +238,45 @@ class CandidateSerializer(serializers.ModelSerializer):
             'partner_id', 'date_open', 'date_last_stage_update',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['candidate_id', 'created_at', 'updated_at']
-
+        read_only_fields = ['candidate_id', 'created_at', 'updated_at', 'generated_skill_summary']
 
 class RecruiterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
-    
+    password = serializers.CharField(write_only=True, required=False)
     class Meta:
         model = Recruiter
         fields = ['id', 'first_name', 'last_name', 'email', 'password', 'image', 'created_at', 'updated_at']
-        extra_kwargs = {'password': {'write_only': True}}
-    
+        extra_kwargs = {'password': {'write_only': True, 'required': False}}
     def create(self, validated_data):
         password = validated_data.pop('password')
         user = Recruiter(**validated_data)
         user.set_password(password)
         user.save()
         return user
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+class VerifyCodeSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField()
+
+class ResetPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    confirm_password = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError("Passwords do not match.")
+        return attrs
 
 class OdooCredentialsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -275,11 +285,9 @@ class OdooCredentialsSerializer(serializers.ModelSerializer):
         read_only_fields = ['credentials_id', 'created_at', 'updated_at']
 
     def validate(self, attrs):
-        """Validate Odoo connection before saving"""
         return attrs
     
     def to_representation(self, instance):
-        """Custom representation to hide encrypted API key"""
         representation = super().to_representation(instance)
         representation.pop('api_key', None)
         return representation

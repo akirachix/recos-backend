@@ -31,14 +31,13 @@ def save_base64_attachment(candidate, attachment_data):
             file_type=mimetype,
             file_size=len(file_content)
         )
-        
+
         attachment.file.save(safe_filename, ContentFile(file_content))
         attachment.save()
         
         return attachment
         
     except Exception as e:
-        print(f"Error saving attachment: {str(e)}")
         return None
 
 def get_file_extension(filename, mimetype):
