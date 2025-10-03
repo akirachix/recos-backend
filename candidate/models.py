@@ -11,7 +11,6 @@ class Candidate(models.Model):
         ('hired', 'Hired'),
         ('rejected', 'Rejected'),
     ]
-    
     candidate_id = models.AutoField(primary_key=True)
     job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='candidates')
     odoo_candidate_id = models.IntegerField(null=True, blank=True)  
@@ -25,7 +24,6 @@ class Candidate(models.Model):
     date_last_stage_update = models.DateTimeField(null=True, blank=True)  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
     class Meta:
         unique_together = ('job', 'odoo_candidate_id') 
     

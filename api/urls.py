@@ -11,7 +11,6 @@ router.register(r'candidates', CandidateViewSet, basename='candidate')
 router.register(r'interview', InterviewViewSet, basename='interview')
 router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
 
-
 urlpatterns = [
     path('', include(router.urls)),
     path('', views.api_root, name='api_root'),

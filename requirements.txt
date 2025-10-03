@@ -34,7 +34,6 @@ protobuf==5.29.5
 pyasn1-modules==0.4.2
 rsa==4.9.1
 tomli==2.2.1
-dj-database-url
 drf-yasg==1.21.10
 inflection==0.5.1
 pytz==2025.2
