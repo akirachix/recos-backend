@@ -31,8 +31,6 @@ class Candidate(models.Model):
     
     def __str__(self):
         return self.name
-    
-
 class CandidateAttachment(models.Model):
     attachment_id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='attachments')
@@ -49,7 +47,6 @@ class CandidateAttachment(models.Model):
     ], default='completed')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
     def __str__(self):
         return f"{self.name} - {self.candidate.name}"
     
