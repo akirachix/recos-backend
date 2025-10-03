@@ -68,7 +68,6 @@ pdfminer-six==20250506
 pycparser==2.23
 python-docx==1.2.0
 python-pptx==1.0.2
-requests==2.32.5
 sniffio==1.3.1
 sqlparse==0.5.3
 tenacity==9.1.2
