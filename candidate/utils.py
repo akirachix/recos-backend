@@ -38,7 +38,6 @@ def save_base64_attachment(candidate, attachment_data):
         return attachment
         
     except Exception as e:
-        print(f"Error saving attachment: {str(e)}")
         return None
 
 def get_file_extension(filename, mimetype):

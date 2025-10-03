@@ -36,10 +36,8 @@ class OdooService:
                 self.session = "authenticated"
                 return True
             else:
-                print(f"Authentication failed. Response: {result}")
                 return False
         except Exception as e:
-            print(f"Authentication failed: {str(e)}")
             return False
     def call_odoo(self, model, method, args=None, kwargs=None):
         if not self.uid:

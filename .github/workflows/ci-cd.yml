@@ -7,10 +7,6 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/test_db
-      SECRET_KEY: ${{ secrets.SECRET_KEY }}
-      ODOO_API_ENCRYPTION_KEY: ${{ secrets.ODOO_API_ENCRYPTION_KEY }}
     strategy:
       matrix:
         python-version: ['3.10'] 
