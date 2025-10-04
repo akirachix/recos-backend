@@ -1022,7 +1022,7 @@ def sync_candidates_for_job(request, job_id):
 def sync_candidates_for_company(request, company_id):
     """Sync all candidates for a company (all jobs)"""
     try:
-        # company = Company.objects.get(company_id=company_id, company__recruiter=request.user)
+
         company = Company.objects.get(company_id=company_id, recruiter=request.user)
 
     except Company.DoesNotExist:
@@ -1335,7 +1335,7 @@ class SyncCandidatesForCompanyView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, company_id):
-        # Return candidates for the company
+       
         candidates = Candidate.objects.filter(job__company__company_id=company_id, job__company__recruiter=request.user)
         serializer = CandidateSerializer(candidates, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -1354,3 +1354,11 @@ class SyncCandidatesForCompanyView(APIView):
             'candidates_count': candidates.count(),
             'candidates': serializer.data
         }, status=status.HTTP_200_OK)
+    
+def download_candidate_attachment(request, attachment_id):
+    try:
+        attachment = CandidateAttachment.objects.get(pk=attachment_id)
+        file_handle = attachment.file.open()
+        return FileResponse(file_handle, as_attachment=True, filename=attachment.get_download_filename())
+    except CandidateAttachment.DoesNotExist:
+        raise Http404("Attachment not found")

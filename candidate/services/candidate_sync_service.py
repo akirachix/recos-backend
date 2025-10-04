@@ -10,6 +10,8 @@ from job.models import Job
 from django.utils import timezone
 from datetime import timedelta
 from dateutil import parser
+from candidate.services.ai_service import generate_candidate_skill_summary
+
 
 def parse_datetime_aware(dt_str):
     if not dt_str:
@@ -18,6 +20,7 @@ def parse_datetime_aware(dt_str):
     if timezone.is_naive(dt):
         dt = timezone.make_aware(dt, timezone.get_current_timezone())
     return dt
+
 
 class CandidateSyncService:
     @staticmethod
@@ -40,6 +43,7 @@ class CandidateSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
 
+
             odoo_candidates = odoo_service.get_candidates(job_id=job.job_id)
             synced_candidates = []
             for odoo_candidate in odoo_candidates:
@@ -55,6 +59,7 @@ class CandidateSyncService:
             print(f"Error syncing candidates for job {job.job_title}: {str(e)}")
             raise
 
+
     @staticmethod
     def _process_single_candidate(odoo_candidate, job):
         """Process a single candidate from Odoo"""
@@ -66,6 +71,7 @@ class CandidateSyncService:
             stage_name = 'Applied'
         state = CandidateSyncService._map_odoo_stage(stage_name)
 
+
         candidate_data = {
             'name': candidate_name,
             'email': odoo_candidate.get('email_from', ''),
@@ -73,19 +79,29 @@ class CandidateSyncService:
             'state': state,
         }
 
+
         partner_id_data = odoo_candidate.get('partner_id', [False])
         if isinstance(partner_id_data, list) and len(partner_id_data) > 0:
             candidate_data['partner_id'] = partner_id_data[0]
 
+
         candidate_data['date_open'] = parse_datetime_aware(odoo_candidate.get('date_open'))
         candidate_data['date_last_stage_update'] = parse_datetime_aware(odoo_candidate.get('date_last_stage_update'))
+
 
         candidate, created = Candidate.objects.update_or_create(
             job=job,
             odoo_candidate_id=odoo_candidate['id'],
             defaults=candidate_data
         )
+
+
+        skill_summary = generate_candidate_skill_summary(candidate)
+        candidate.generated_skill_summary = skill_summary
+        candidate.save(update_fields=["generated_skill_summary"])
+
         return candidate
+
 
     @staticmethod
     def sync_candidates_for_company(company, odoo_service=None):
@@ -107,8 +123,10 @@ class CandidateSyncService:
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
 
+
             company_jobs = Job.objects.filter(company=company)
             odoo_candidates = odoo_service.get_candidates(company_id=company.odoo_company_id)
+
 
             synced_count = 0
             for odoo_candidate in odoo_candidates:
@@ -118,6 +136,7 @@ class CandidateSyncService:
                         job_title = job_id_data[1]
                     else:
                         job_title = 'Unknown Job'
+
 
                     matching_job = None
                     for job in company_jobs:
@@ -129,6 +148,7 @@ class CandidateSyncService:
                             if job_title.lower() in job.job_title.lower() or job.job_title.lower() in job_title.lower():
                                 matching_job = job
                                 break
+
 
                     if not matching_job:
                         matching_job, created = Job.objects.get_or_create(
@@ -142,6 +162,7 @@ class CandidateSyncService:
                         )
                         company_jobs = Job.objects.filter(company=company)
 
+
                     candidate = CandidateSyncService._process_single_candidate(odoo_candidate, matching_job)
                     CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
                     synced_count += 1
@@ -152,6 +173,7 @@ class CandidateSyncService:
         except Exception as e:
             print(f"Error syncing candidates for company {company.company_name}: {str(e)}")
             raise
+
 
     @staticmethod
     def sync_all_candidates_for_recruiter(recruiter):
@@ -171,8 +193,10 @@ class CandidateSyncService:
             if not odoo_service.authenticate():
                 raise Exception("Failed to authenticate with Odoo")
 
+
             from companies.models import Company
             companies = Company.objects.filter(recruiter=recruiter)
+
 
             total_synced = 0
             for company in companies:
@@ -184,10 +208,12 @@ class CandidateSyncService:
                     print(f"Error syncing candidates for company {company.company_name}: {str(e)}")
                     continue
 
+
             return total_synced
         except Exception as e:
             print(f"Error syncing all candidates for recruiter {recruiter.email}: {str(e)}")
             raise
+
 
     @staticmethod
     def _map_odoo_stage(odoo_stage_name):
@@ -203,6 +229,7 @@ class CandidateSyncService:
             'Hired': 'hired',
         }
         return stage_mapping.get(odoo_stage_name, 'applied')
+
 
     @staticmethod
     def sync_attachments_for_candidate(candidate, odoo_service):
@@ -220,6 +247,7 @@ class CandidateSyncService:
         except Exception as e:
             return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"
 
+
     @staticmethod
     def _process_single_attachment(candidate, attachment_data, odoo_service):
         """Process a single attachment with base64 decoding"""
@@ -227,31 +255,38 @@ class CandidateSyncService:
         attachment_name = attachment_data.get('name', f'attachment_{attachment_id}')
         attachment_type = attachment_data.get('mimetype', 'application/octet-stream')
 
+
         if CandidateAttachment.objects.filter(
             candidate=candidate,
             odoo_attachment_id=attachment_id
         ).exists():
             return
 
+
         try:
             attachment_detail = odoo_service.get_attachment_content(attachment_id)
+
 
             if attachment_detail and 'datas' in attachment_detail:
                 base64_data = attachment_detail['datas']
                 file_content = base64.b64decode(base64_data)
 
+
                 original_filename = attachment_detail.get('datas_fname', attachment_detail.get('name', f'attachment_{attachment_id}'))
+
 
                 file_extension = CandidateSyncService._get_file_extension(
                     attachment_detail.get('mimetype'),
                     original_filename
                 )
 
+
                 file_name = CandidateSyncService._generate_filename(
                     attachment_name,
                     file_extension,
                     attachment_id
                 )
+
 
                 attachment = CandidateAttachment(
                     candidate=candidate,
@@ -262,8 +297,10 @@ class CandidateSyncService:
                     original_filename=original_filename
                 )
 
+
                 attachment.file.save(file_name, ContentFile(file_content))
                 attachment.save()
+
 
             else:
                 attachment = CandidateAttachment(
@@ -288,6 +325,7 @@ class CandidateSyncService:
             )
             attachment.save()
 
+
     @staticmethod
     def _get_file_extension(mimetype, original_filename):
         """Get appropriate file extension from mimetype or filename"""
@@ -301,6 +339,7 @@ class CandidateSyncService:
             if ext:
                 return ext.lower()
         return '.bin'
+
 
     @staticmethod
     def _generate_filename(attachment_name, file_extension, attachment_id):

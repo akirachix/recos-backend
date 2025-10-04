@@ -1,8 +1,15 @@
 from rest_framework.routers import DefaultRouter
-from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet, SyncCandidatesForCompanyView
-from django.urls import path,include
+from .views import (
+    InterviewConversationViewSet,
+    JobViewSet,
+    CandidateViewSet,
+    AIReportViewSet,
+    InterviewViewSet,
+    SyncCandidatesForCompanyView,
+    download_candidate_attachment,
+)
+from django.urls import path, include
 from . import views
-
 
 router = DefaultRouter()
 router.register(r'interview_conversations', InterviewConversationViewSet, basename='interview_conversation')
@@ -10,7 +17,6 @@ router.register(r'jobs', JobViewSet, basename='job')
 router.register(r'candidates', CandidateViewSet, basename='candidate')
 router.register(r'interview', InterviewViewSet, basename='interview')
 router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
-
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -22,7 +28,7 @@ urlpatterns = [
     path('odoo-credentials/', views.add_odoo_credentials, name='add_odoo_credentials'),
     path('odoo-credentials/list/', views.get_odoo_credentials, name='get_odoo_credentials'),
     path('companies/', views.get_companies, name='get_companies'),
-    path('users/', views.RecruiterListView.as_view(),name='recruiter_list'),
+    path('users/', views.RecruiterListView.as_view(), name='recruiter_list'),
     path('forgot-password/', views.ForgotPasswordView.as_view(), name='forgot_password'),
     path('reset-password/', views.ResetPasswordView.as_view(), name='reset_password'),
     path('verify-reset-code/', views.VerifyCodeView.as_view(), name='verify_reset_code'),
@@ -38,6 +44,7 @@ urlpatterns = [
     path('sync/jobs/user/', views.sync_jobs_for_user, name='sync_jobs_for_user'),
     path('candidates/<int:candidate_id>/attachments/download/<int:attachment_id>/', views.download_candidate_attachment, name='download_candidate_attachment'),
     path('sync/candidates/<int:candidate_id>/attachments/', views.sync_candidate_attachments, name='sync_candidate_attachments'),
+    path('candidate_attachments/<int:attachment_id>/download/', download_candidate_attachment, name='download_candidate_attachment'),
     path('interviews/create/', views.create_interview, name='create-interview'),
     path('interviews/<int:interview_id>/create-calendar-event/', views.create_interview_event, name='create-calendar-event'),
     path('interviews/<int:interview_id>/analytics/', views.get_interview_analytics, name='get-interview-analytics'),

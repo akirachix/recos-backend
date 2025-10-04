@@ -40,6 +40,7 @@ class CandidateAttachment(models.Model):
     name = models.CharField(max_length=255)
     original_filename = models.CharField(max_length=255, blank=True, null=True)
     file = models.FileField(upload_to='candidate_attachments/%Y/%m/%d/')
+    
     file_type = models.CharField(max_length=100)
     file_size = models.IntegerField(default=0)
     sync_status = models.CharField(max_length=20, choices=[

@@ -126,6 +126,9 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+MEDIA_ROOT = os.path.join(BASE_DIR, 'candidate_attachments')
+MEDIA_URL = '/media/'
+
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -182,5 +185,5 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 SITE_NAME = 'Recos'
 PASSWORD_RESET_TIMEOUT = 3600
 
-
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+

@@ -12,7 +12,7 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()
     preview_url = serializers.SerializerMethodField()
     file_type_display = serializers.SerializerMethodField()
-
+    
     class Meta:
         model = CandidateAttachment
         fields = [
@@ -21,18 +21,26 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
             'file_type_display', 'file_size', 'sync_status', 'created_at'
         ]
         read_only_fields = ['attachment_id', 'created_at']
-
+    
     def get_file_url(self, obj):
-        if obj.file:
-            return obj.file.url
-        return None
 
+       request = self.context.get('request')
+
+       if obj.file and request:
+        return request.build_absolute_uri(obj.file.url)
+       return None
+
+    
     def get_download_url(self, obj):
-        return f"/api/candidate-attachments/{obj.attachment_id}/download/"
+     request = self.context.get('request')
+     if request:
+        return request.build_absolute_uri(f"/api/candidate_attachments/{obj.attachment_id}/download/")
+     return f"/api/candidate_attachments/{obj.attachment_id}/download/"
 
+ 
     def get_preview_url(self, obj):
         return f"/api/candidate-attachments/{obj.attachment_id}/preview/"
-
+    
     def get_file_type_display(self, obj):
         if obj.is_pdf():
             return "PDF Document"
@@ -44,7 +52,6 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
             return "Spreadsheet"
         else:
             return "File"
-
 
 class InterviewConversationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -240,7 +247,7 @@ class CandidateSerializer(serializers.ModelSerializer):
             'partner_id', 'date_open', 'date_last_stage_update',
             'created_at', 'updated_at', 'attachments'
         ]
-        read_only_fields = ['candidate_id', 'created_at', 'updated_at']
+        read_only_fields = ['candidate_id', 'created_at', 'updated_at', 'generated_skill_summary']
 
 class RecruiterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
