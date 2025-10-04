@@ -368,4 +368,3 @@ class CandidateSyncService:
             clean_name = clean_name[:50]
         
         return f"candidate_attachment_{attachment_id}_{clean_name}{file_extension}"
-   

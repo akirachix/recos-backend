@@ -207,9 +207,3 @@ class OdooService:
             return None
         except Exception as e:
             return None
-
-
-
-
-
-
