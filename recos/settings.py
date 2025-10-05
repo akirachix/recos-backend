@@ -77,11 +77,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recos.wsgi.application"
 
-if os.getenv("DATABASE_URL"):
-    DATABASES = {
-        'default': dj_database_url.parse(os.getenv("DATABASE_URL"))
-    }
-else:
+DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
+if not os.getenv("DATABASE_URL"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
