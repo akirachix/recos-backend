@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+import dj_database_url
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -76,12 +77,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recos.wsgi.application"
 
-if os.getenv("DATABASE_URL"):
-    import dj_database_url
-    DATABASES = {
-        'default': dj_database_url.parse(os.getenv("DATABASE_URL"))
-    }
-else:
+DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
+if not os.getenv("DATABASE_URL"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
@@ -117,7 +114,6 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')] 
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
