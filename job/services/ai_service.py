@@ -1,21 +1,20 @@
 import google.genai as genai
 from google.genai import types
 from django.conf import settings
-import logging
+
 import json
 
-logger = logging.getLogger(__name__)
+
 
 def get_genai_client():
     try:
         api_key = getattr(settings, 'GEMINI_API_KEY', None)
         if not api_key:
-            logger.error("GEMINI_API_KEY is not configured in settings")
+
             return None
             
         return genai.Client(api_key=api_key)
     except Exception as e:
-        logger.error(f"Failed to initialize GenAI client: {str(e)}")
         return None
     
 def generate_job_summary(job_description):
@@ -66,11 +65,9 @@ def generate_job_summary(job_description):
         if isinstance(summary_data, dict) and 'job_summary' in summary_data:
             return summary_data['job_summary'].strip()
         else:
-            logger.error(f"Unexpected response format: {summary_data}")
             return "Summary generation failed: Unexpected response format"
             
     except Exception as e:
-        logger.error(f"Error generating job summary: {str(e)}")
         return f"Summary generation failed: {str(e)}"
 
 def parse_gemini_response(response_text):
@@ -84,5 +81,4 @@ def parse_gemini_response(response_text):
         
         return json.loads(cleaned_text)
     except json.JSONDecodeError:
-        logger.warning(f"Failed to parse Gemini response: {response_text}")
         return {"raw_response": response_text}

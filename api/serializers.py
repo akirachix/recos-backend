@@ -28,8 +28,8 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
         return None
     
     def get_download_url(self, obj):
-        return f"/api/candidate-attachments/{obj.attachment_id}/download/"
-    
+        return f"/api/candidates/{obj.candidate_id}/attachments/download/{obj.attachment_id}/"
+        
     def get_preview_url(self, obj):
         return f"/api/candidate-attachments/{obj.attachment_id}/preview/"
     
@@ -213,6 +213,7 @@ class JobSerializer(serializers.ModelSerializer):
             'company_name', 
             'company_id',
             'job_title', 
+            'odoo_job_id',
             'job_description', 
             'generated_job_summary', 
             'state', 
@@ -224,6 +225,7 @@ class JobSerializer(serializers.ModelSerializer):
             'company': {'required': True},
             'expired_at': {'required': False},
             'generated_job_summary': {'read_only': True},
+            'odoo_job_id': {'read_only': True}
         }
 
 class CandidateSerializer(serializers.ModelSerializer):
@@ -304,6 +306,7 @@ class CompanySerializer(serializers.ModelSerializer):
             'recruiter_email',
             'recruiter_id',
             'odoo_credentials',
+            'odoo_company_id',
             'is_active',
             'created_at',
             'updated_at'
