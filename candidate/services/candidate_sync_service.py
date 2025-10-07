@@ -9,9 +9,8 @@ import os
 from job.models import Job 
 from datetime import timezone, timedelta
 from candidate.services.ai_service import generate_candidate_skill_summary
-import logging
 
-logger = logging.getLogger(__name__)
+
 
 class CandidateSyncService:
     @staticmethod
@@ -39,7 +38,6 @@ class CandidateSyncService:
                     raise Exception("Failed to authenticate with Odoo")
                 
             if not job.odoo_job_id:
-                logger.warning(f"Job {job.job_title} (ID: {job.job_id}) has no odoo_job_id. Skipping sync.")
                 return []
                 
             odoo_candidates = odoo_service.get_candidates(job_id=job.odoo_job_id)
@@ -59,13 +57,11 @@ class CandidateSyncService:
                     
                     synced_candidates.append(candidate)
                 except Exception as e:
-                    logger.error(f"Failed to sync candidate {odoo_candidate.get('partner_name')}: {str(e)}")
                     continue
             
             return synced_candidates
             
         except Exception as e:
-            logger.error(f"Failed to sync candidates for job {job.job_title}: {str(e)}")
             raise
 
     @staticmethod
@@ -350,22 +346,14 @@ class CandidateSyncService:
     def sync_attachments_for_candidate(candidate, odoo_service):
         """Sync attachments for a single candidate"""
         try:
-           
-            logger.info(f"Syncing attachments for candidate: {candidate.name} (Odoo ID: {candidate.odoo_candidate_id})")
             
             attachments = odoo_service.get_attachments(
                 res_model='hr.applicant',
                 res_id=candidate.odoo_candidate_id
             )
           
-            logger.info(f"Odoo returned {len(attachments)} attachments for candidate {candidate.name}")
-            if not attachments:
-                logger.warning(f"No attachments found in Odoo for candidate ID {candidate.odoo_candidate_id}")
-            
-            has_new_attachments = False
             
             for attachment_data in attachments:
-                logger.info(f"Processing attachment: {attachment_data.get('name')} (ID: {attachment_data.get('id')})")
                 try:
                     if not CandidateAttachment.objects.filter(
                         candidate=candidate, 
@@ -373,21 +361,17 @@ class CandidateSyncService:
                     ).exists():
                         CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
                         has_new_attachments = True
-                        logger.info(f"Successfully saved new attachment: {attachment_data.get('name')}")
                     else:
-                        logger.info(f"Attachment already exists, skipping: {attachment_data.get('name')}")
+                        return f"Attachment already exists, skipping: {attachment_data.get('name')}"
                 except Exception as e:
-                    logger.error(f"Error processing attachment {attachment_data.get('id')}: {str(e)}")
                     continue   
 
             if has_new_attachments:
-                logger.info(f"New attachments found for {candidate.name}, generating skill summary.")
                 skill_summary = generate_candidate_skill_summary(candidate)
                 candidate.generated_skill_summary = skill_summary
                 candidate.save()
             else:
-                logger.info(f"No new attachments for {candidate.name}, not regenerating summary.")
+                return f"No new attachments for {candidate.name}, not regenerating summary."
                 
         except Exception as e:
-            logger.error(f"Error in sync_attachments_for_candidate for {candidate.name}: {str(e)}")
             return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"

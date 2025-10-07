@@ -1,5 +1,4 @@
 
-import logging
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from datetime import timedelta
@@ -9,7 +8,7 @@ from companies.models import Company
 from job.models import Job
 from job.services.ai_service import generate_job_summary
 
-logger = logging.getLogger(__name__)
+
 
 class JobSyncService:
     @staticmethod
@@ -44,7 +43,6 @@ class JobSyncService:
                 raise Exception("Failed to authenticate with Odoo")
            
             if not company.odoo_company_id:
-                logger.warning(f"Company {company.company_name} has no odoo_company_id. Cannot sync jobs.")
                 return []
                 
             odoo_jobs = odoo_service.get_jobs(user_id=odoo_creds.odoo_user_id, company_id=company.odoo_company_id)
@@ -66,12 +64,10 @@ class JobSyncService:
                 )
                 
                 action = "Created" if created else "Updated"
-                logger.info(f"{action} job: {job.job_title} (Odoo ID: {job.odoo_job_id})")
                 synced_jobs.append(job)
             
             return synced_jobs
         except Exception as e:
-            logger.error(f"Failed to sync jobs for company {company.company_name}: {str(e)}")
             raise
 
     @staticmethod
@@ -103,7 +99,6 @@ class JobSyncService:
                     odoo_company_id = odoo_job['company_id'][0]
                 
                 if not odoo_company_id or odoo_company_id not in company_map:
-                    logger.warning(f"Skipping job '{odoo_job.get('name')}' due to missing or mismatched company.")
                     continue
                 
                 company = company_map[odoo_company_id]
@@ -120,11 +115,8 @@ class JobSyncService:
                     }
                 )
                 
-                action = "Created" if created else "Updated"
-                logger.info(f"{action} job: {job.job_title} (Odoo ID: {job.odoo_job_id})")
                 synced_jobs.append(job)
             
             return synced_jobs
         except Exception as e:
-            logger.error(f"Failed to sync jobs for user {recruiter.email}: {str(e)}")
             raise

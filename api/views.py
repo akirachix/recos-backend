@@ -14,7 +14,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
 import os
-import logging
 import random
 import requests
 from django.core.cache import cache
@@ -66,7 +65,7 @@ User = get_user_model()
 
 code_storage = {}
 
-logger = logging.getLogger(__name__)
+
 
 
 class ForgotPasswordView(APIView):
@@ -156,7 +155,6 @@ def google_auth_initiate(request):
             'message': 'Please authenticate with Google Calendar'
         })
     except Exception as e:
-        logger.error(f"Failed to generate authorization URL: {str(e)}")
         return Response({
             'success': False,
             'error': str(e)
@@ -167,8 +165,7 @@ def google_auth_initiate(request):
 def google_auth_callback(request):
     """Handle Google OAuth callback"""
     try:
-        logger.info(f"Google OAuth callback received. Query params: {dict(request.GET)}")
-        
+
         credentials = GoogleCalendarService.exchange_code_for_token(request)
         
         return Response({
@@ -178,7 +175,6 @@ def google_auth_callback(request):
             'next_steps': 'You can now create calendar events.'
         })
     except Exception as e:
-        logger.error(f"Google OAuth callback failed: {str(e)}")
         return Response({
             'success': False,
             'error': str(e),
@@ -216,9 +212,7 @@ def create_interview(request):
                 }, status=status.HTTP_201_CREATED)
                 
             except Exception as e:
-                error_str = str(e)
-                logger.error(f"Calendar event creation failed: {error_str}")
-                
+                error_str = str(e)  
                 if "Google authentication required" in error_str or "Manual authentication required" in error_str:
                     from interview.utils import GoogleCalendarService
                     if "Please visit:" in error_str:
@@ -247,7 +241,6 @@ def create_interview(request):
         }, status=status.HTTP_400_BAD_REQUEST)
         
     except Exception as e:
-        logger.error(f"Interview creation failed: {str(e)}")
         return Response({
             'success': False,
             'error': str(e)
@@ -284,7 +277,7 @@ def create_interview_event(request, interview_id):
         
     except Exception as e:
         error_str = str(e)
-        logger.error(f"Error creating calendar event: {error_str}")
+  
         
         if "Google authentication required" in error_str or "Manual authentication required" in error_str:
             from interview.utils import GoogleCalendarService
