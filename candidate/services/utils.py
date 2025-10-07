@@ -1,5 +1,6 @@
+
 import os
-from pdfminer.high_level import extract_text as extract_pdf_text
+from pdfminer.high_level import extract_text as pdfminer_extract_text 
 from docx import Document
 import openpyxl
 import pptx
@@ -15,7 +16,7 @@ def extract_text_from_file(file_path):
     file_ext = os.path.splitext(file_path)[1].lower()
     
     if file_ext == '.pdf':
-        return extract_pdf_text(file_path)
+        return _extract_pdf_text(file_path) 
     elif file_ext in ['.doc', '.docx']:
         return extract_docx_text(file_path)
     elif file_ext == '.txt':
@@ -27,12 +28,14 @@ def extract_text_from_file(file_path):
     else:
         raise ValueError(f"Unsupported file type: {file_ext}")
 
-def extract_pdf_text(file_path):
-    """Extract text from PDF files"""
+def _extract_pdf_text(file_path): 
+    """Extract text from PDF files using pdfminer."""
     try:
-        return extract_pdf_text(file_path)
+        
+        return pdfminer_extract_text(file_path)
     except Exception as e:
-        raise
+      
+        raise Exception(f"Failed to extract text from PDF {file_path}: {str(e)}")
 
 def extract_docx_text(file_path):
     """Extract text from DOCX files"""
@@ -40,7 +43,7 @@ def extract_docx_text(file_path):
         doc = Document(file_path)
         return "\n".join([paragraph.text for paragraph in doc.paragraphs])
     except Exception as e:
-        raise
+        raise Exception(f"Failed to extract text from DOCX {file_path}: {str(e)}")
 
 def extract_txt_text(file_path):
     """Extract text from TXT files"""
@@ -52,7 +55,9 @@ def extract_txt_text(file_path):
             with open(file_path, 'r', encoding='latin-1') as file:
                 return file.read()
         except Exception as e:
-            raise
+            raise Exception(f"Failed to extract text from TXT {file_path} with latin-1 encoding: {str(e)}")
+    except Exception as e:
+        raise Exception(f"Failed to read TXT file {file_path}: {str(e)}")
 
 def extract_excel_text(file_path):
     """Extract text from Excel files"""
@@ -65,7 +70,7 @@ def extract_excel_text(file_path):
                 text.append("\t".join(row_text))
         return "\n".join(text)
     except Exception as e:
-        raise
+        raise Exception(f"Failed to extract text from Excel {file_path}: {str(e)}")
 
 def extract_pptx_text(file_path):
     """Extract text from PowerPoint files"""
@@ -78,4 +83,4 @@ def extract_pptx_text(file_path):
                     text.append(shape.text)
         return "\n".join(text)
     except Exception as e:
-        raise
+        raise Exception(f"Failed to extract text from PowerPoint {file_path}: {str(e)}")

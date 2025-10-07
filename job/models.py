@@ -14,6 +14,7 @@ class Job(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name='jobs')
     job_title = models.CharField(max_length=100)
     job_description = models.TextField()
+    odoo_job_id = models.IntegerField(null=True, blank=True)
     generated_job_summary = models.TextField(blank=True, null=True)
     state = models.CharField(max_length=50, choices=JOB_STATES, default='open') 
     posted_at = models.DateTimeField()
