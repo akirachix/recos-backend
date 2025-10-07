@@ -763,9 +763,13 @@ def add_odoo_credentials(request):
         existing_companies = Company.objects.filter(recruiter=request.user)
         created_companies = []
         for odoo_company in odoo_companies:
+            odoo_company_id = odoo_company['id']
             company_name = odoo_company['name']
             existing_company = existing_companies.filter(company_name=company_name).first()
             if existing_company:
+                if not existing_company.odoo_company_id:
+                    existing_company.odoo_company_id = odoo_company_id
+                existing_company.odoo_credentials = credentials
                 existing_company.odoo_credentials = credentials
                 existing_company.save()
                 created_companies.append(existing_company)
@@ -774,7 +778,8 @@ def add_odoo_credentials(request):
                     company_name=company_name,
                     recruiter=request.user,
                     odoo_credentials=credentials,
-                    is_active=True
+                    is_active=True,
+                    odoo_company_id=odoo_company_id
                 )
                 created_companies.append(comp)
     except Exception as e:
@@ -979,11 +984,13 @@ def sync_jobs_handle_duplicates(request):
             
             job, created = Job.objects.update_or_create(
                 company=company,
-                job_title=odoo_job['name'],
+                odoo_job_id=odoo_job['id'],
                 defaults={
+                    'job_title':odoo_job['name'],
                     'job_description': odoo_job.get('description', ''),
                     'state': odoo_job.get('state', 'open'),
-                    'expired_at': timezone.now() + timedelta(days=365)
+                    'expired_at': timezone.now() + timedelta(days=365),
+                    'posted_at': parse_datetime(odoo_job.get('create_date')) 
                 }
             )
             
