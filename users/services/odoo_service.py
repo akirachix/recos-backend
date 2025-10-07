@@ -122,7 +122,7 @@ class OdooService:
             'hr.job', 
             'search_read', 
             [domain], 
-            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment','create_date']}
+            {'fields': ['id', 'name', 'company_id', 'description', 'no_of_recruitment','create_date']}
         )
     
     def get_jobs_by_user(self, user_id):
@@ -133,7 +133,7 @@ class OdooService:
             'hr.job', 
             'search_read', 
             [domain], 
-            {'fields': ['name', 'company_id', 'description', 'no_of_recruitment','create_date']}
+            {'fields': ['id', 'name', 'company_id', 'description', 'no_of_recruitment','create_date']}
         )
     
     def get_candidates(self, job_id=None, company_id=None):
