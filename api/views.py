@@ -14,7 +14,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
 import os
-import logging
 import random
 import requests
 from django.core.cache import cache
@@ -66,7 +65,7 @@ User = get_user_model()
 
 code_storage = {}
 
-logger = logging.getLogger(__name__)
+
 
 
 class ForgotPasswordView(APIView):
@@ -156,7 +155,6 @@ def google_auth_initiate(request):
             'message': 'Please authenticate with Google Calendar'
         })
     except Exception as e:
-        logger.error(f"Failed to generate authorization URL: {str(e)}")
         return Response({
             'success': False,
             'error': str(e)
@@ -167,8 +165,7 @@ def google_auth_initiate(request):
 def google_auth_callback(request):
     """Handle Google OAuth callback"""
     try:
-        logger.info(f"Google OAuth callback received. Query params: {dict(request.GET)}")
-        
+
         credentials = GoogleCalendarService.exchange_code_for_token(request)
         
         return Response({
@@ -178,7 +175,6 @@ def google_auth_callback(request):
             'next_steps': 'You can now create calendar events.'
         })
     except Exception as e:
-        logger.error(f"Google OAuth callback failed: {str(e)}")
         return Response({
             'success': False,
             'error': str(e),
@@ -216,9 +212,7 @@ def create_interview(request):
                 }, status=status.HTTP_201_CREATED)
                 
             except Exception as e:
-                error_str = str(e)
-                logger.error(f"Calendar event creation failed: {error_str}")
-                
+                error_str = str(e)  
                 if "Google authentication required" in error_str or "Manual authentication required" in error_str:
                     from interview.utils import GoogleCalendarService
                     if "Please visit:" in error_str:
@@ -247,7 +241,6 @@ def create_interview(request):
         }, status=status.HTTP_400_BAD_REQUEST)
         
     except Exception as e:
-        logger.error(f"Interview creation failed: {str(e)}")
         return Response({
             'success': False,
             'error': str(e)
@@ -284,7 +277,7 @@ def create_interview_event(request, interview_id):
         
     except Exception as e:
         error_str = str(e)
-        logger.error(f"Error creating calendar event: {error_str}")
+  
         
         if "Google authentication required" in error_str or "Manual authentication required" in error_str:
             from interview.utils import GoogleCalendarService
@@ -763,9 +756,13 @@ def add_odoo_credentials(request):
         existing_companies = Company.objects.filter(recruiter=request.user)
         created_companies = []
         for odoo_company in odoo_companies:
+            odoo_company_id = odoo_company['id']
             company_name = odoo_company['name']
             existing_company = existing_companies.filter(company_name=company_name).first()
             if existing_company:
+                if not existing_company.odoo_company_id:
+                    existing_company.odoo_company_id = odoo_company_id
+                existing_company.odoo_credentials = credentials
                 existing_company.odoo_credentials = credentials
                 existing_company.save()
                 created_companies.append(existing_company)
@@ -774,7 +771,8 @@ def add_odoo_credentials(request):
                     company_name=company_name,
                     recruiter=request.user,
                     odoo_credentials=credentials,
-                    is_active=True
+                    is_active=True,
+                    odoo_company_id=odoo_company_id
                 )
                 created_companies.append(comp)
     except Exception as e:
@@ -979,11 +977,13 @@ def sync_jobs_handle_duplicates(request):
             
             job, created = Job.objects.update_or_create(
                 company=company,
-                job_title=odoo_job['name'],
+                odoo_job_id=odoo_job['id'],
                 defaults={
+                    'job_title':odoo_job['name'],
                     'job_description': odoo_job.get('description', ''),
                     'state': odoo_job.get('state', 'open'),
-                    'expired_at': timezone.now() + timedelta(days=365)
+                    'expired_at': timezone.now() + timedelta(days=365),
+                    'posted_at': parse_datetime(odoo_job.get('create_date')) 
                 }
             )
             

@@ -1,23 +1,20 @@
 import google.genai as genai
 from google.genai import types
 from django.conf import settings
-import logging
+
 import json
 import os
 from .utils import extract_text_from_file
 
-logger = logging.getLogger(__name__)
 
 def get_genai_client():
     try:
         api_key = getattr(settings, 'GEMINI_API_KEY', None)
         if not api_key:
-            logger.error("GEMINI_API_KEY is not configured in settings")
             return None
             
         return genai.Client(api_key=api_key)
     except Exception as e:
-        logger.error(f"Failed to initialize GenAI client: {str(e)}")
         return None
     
 def generate_candidate_skill_summary(candidate):
@@ -32,7 +29,6 @@ def generate_candidate_skill_summary(candidate):
                     text = extract_text_from_file(attachment.file.path)
                     resume_text += f"\n\n--- Document: {attachment.name} ---\n{text}"
                 except Exception as e:
-                    logger.warning(f"Failed to extract text from {attachment.name}: {str(e)}")
                     continue
         
         if not resume_text.strip():
@@ -100,7 +96,6 @@ def generate_candidate_skill_summary(candidate):
         return summary
         
     except Exception as e:
-        logger.error(f"Error generating skill summary for candidate {candidate.name}: {str(e)}")
         return f"Skill summary generation failed: {str(e)}"
 
 def parse_gemini_response(response_text):
@@ -114,7 +109,6 @@ def parse_gemini_response(response_text):
         
         return json.loads(cleaned_text)
     except json.JSONDecodeError:
-        logger.warning(f"Failed to parse Gemini response: {response_text}")
         return {"raw_response": response_text}
 
 def format_skill_summary(skill_data):

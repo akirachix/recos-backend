@@ -1,4 +1,4 @@
-import logging
+
 import json
 import pickle
 import os
@@ -10,8 +10,6 @@ from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow, Flow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-
-logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 CREDENTIALS_PATH = os.path.join(settings.BASE_DIR, 'credentials.json')
@@ -80,7 +78,6 @@ class GoogleCalendarService:
             return auth_url
             
         except Exception as e:
-            logger.error(f"Failed to generate authorization URL: {str(e)}")
             raise
 
     @classmethod
@@ -136,7 +133,6 @@ class GoogleCalendarService:
             return credentials
             
         except Exception as e:
-            logger.error(f"Failed to exchange code for token: {str(e)}")
             raise
 
     @staticmethod
@@ -155,7 +151,6 @@ class GoogleCalendarService:
             }
             with open(CREDENTIALS_PATH, 'w') as f:
                 json.dump(credentials_data, f, indent=2)
-            logger.info(f"Created {CREDENTIALS_PATH} from environment variables")
 
     @classmethod
     def get_credentials_from_session(cls, request, user_id):
@@ -174,7 +169,6 @@ class GoogleCalendarService:
                 scopes=creds_dict['scopes']
             )
         except Exception as e:
-            logger.error(f"Failed to create credentials from session: {str(e)}")
             return None
 
     @classmethod
@@ -228,7 +222,6 @@ class GoogleCalendarService:
                 return credentials
                 
         except Exception as e:
-            logger.error(f"Failed to get Google credentials: {str(e)}")
             raise
         
     @classmethod
@@ -295,11 +288,9 @@ class GoogleCalendarService:
                 'ai_join_url': cls._generate_ai_meet_url(created_event, interview)
             }
 
-            logger.info(f"Created interview event with AI assistant: {event_info['event_id']}")
             return event_info
 
         except Exception as e:
-            logger.error(f"Failed to create interview event: {str(e)}")
             raise
 
     @staticmethod
@@ -315,7 +306,7 @@ class GoogleCalendarService:
                 'responseStatus': 'accepted'
             })
         else:
-            logger.warning(f"Missing recruiter email for interview {interview.interview_id}")
+           return f"Missing recruiter email for interview {interview.interview_id}"
         
         ai_email = GoogleCalendarService.AI_ASSISTANT_EMAIL.strip().lower()
         if ai_email and '@' in ai_email:
@@ -327,7 +318,7 @@ class GoogleCalendarService:
                 'comment': 'AI Analysis Assistant - Provides real-time feedback and analysis'
             })
         else:
-            logger.error(f"Invalid AI assistant email: {ai_email}")
+            return f"Invalid AI assistant email: {ai_email}"
         
         if interview.candidate and interview.candidate.email:
             attendees.append({
@@ -337,9 +328,7 @@ class GoogleCalendarService:
                 'optional': False
             })
         else:
-            logger.warning(f"Missing candidate email for interview {interview.interview_id}")
-        
-        logger.info(f"Built attendees: {attendees}")
+           return f"Missing candidate email for interview {interview.interview_id}"
         return attendees
 
     @staticmethod
@@ -432,11 +421,9 @@ If you experience any issues joining the meeting, please contact IT support.
                 conferenceDataVersion=1
             ).execute()
 
-            logger.info(f"Enabled AI features for Google Meet event: {event_id}")
             return updated_event
 
         except Exception as e:
-            logger.error(f"Failed to enable AI features: {str(e)}")
             raise
 
     @classmethod
@@ -473,7 +460,6 @@ If you experience any issues joining the meeting, please contact IT support.
             }
 
         except Exception as e:
-            logger.error(f"Failed to get meeting analytics: {str(e)}")
             return None
 
     @classmethod
@@ -508,12 +494,9 @@ If you experience any issues joining the meeting, please contact IT support.
                 body=event,
                 sendUpdates='all'
             ).execute()
-
-            logger.info(f"Updated interview event: {interview.google_event_id}")
             return updated_event
 
         except Exception as e:
-            logger.error(f"Failed to update interview event: {str(e)}")
             raise
 
     @classmethod
@@ -530,12 +513,9 @@ If you experience any issues joining the meeting, please contact IT support.
                 eventId=interview.google_event_id,
                 sendUpdates='all'
             ).execute()
-
-            logger.info(f"Cancelled interview event: {interview.google_event_id}")
             return True
 
         except Exception as e:
-            logger.error(f"Failed to cancel interview event: {str(e)}")
             raise
 
 

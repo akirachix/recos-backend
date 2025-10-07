@@ -29,6 +29,7 @@ class Candidate(models.Model):
     
     def __str__(self):
         return self.name
+    
 class CandidateAttachment(models.Model):
     attachment_id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='attachments')
