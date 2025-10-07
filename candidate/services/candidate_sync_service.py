@@ -10,6 +10,8 @@ from job.models import Job
 from datetime import timezone, timedelta
 from candidate.services.ai_service import generate_candidate_skill_summary
 
+
+
 class CandidateSyncService:
     @staticmethod
     def sync_candidates_for_job(job, odoo_service=None):
@@ -34,9 +36,13 @@ class CandidateSyncService:
                 
                 if not odoo_service.authenticate():
                     raise Exception("Failed to authenticate with Odoo")
-            
-            odoo_candidates = odoo_service.get_candidates(job_id=job.job_id)
+                
+            if not job.odoo_job_id:
+                return []
+                
+            odoo_candidates = odoo_service.get_candidates(job_id=job.odoo_job_id)
 
+            
             synced_candidates = []
             for odoo_candidate in odoo_candidates:
                 try:
@@ -131,7 +137,9 @@ class CandidateSyncService:
             for odoo_candidate in odoo_candidates:
                 try:
                     job_id_data = odoo_candidate.get('job_id', [False, 'Unknown Job'])
+                    odoo_job_id = False
                     if isinstance(job_id_data, list) and len(job_id_data) > 1:
+                        odoo_job_id = job_id_data[0] 
                         job_title = job_id_data[1]
                     else:
                         job_title = 'Unknown Job'
@@ -153,6 +161,7 @@ class CandidateSyncService:
                             company=company,
                             job_title=job_title,
                             defaults={
+                                'odoo_job_id': odoo_job_id, 
                                 'job_description': f"Auto-created for candidate sync: {job_title}",
                                 'state': 'open',
                                 'expired_at': timezone.now() + timedelta(days=365)
@@ -234,36 +243,6 @@ class CandidateSyncService:
             return parse_datetime(odoo_date_string)
         except (ValueError, TypeError):
             return None
-    
-    @staticmethod
-    def sync_attachments_for_candidate(candidate, odoo_service):
-        """Sync attachments for a single candidate"""
-        try:
-            attachments = odoo_service.get_attachments(
-                res_model='hr.applicant',
-                res_id=candidate.odoo_candidate_id
-            )
-            
-            has_new_attachments = False
-            
-            for attachment_data in attachments:
-                try:
-                    if not CandidateAttachment.objects.filter(
-                        candidate=candidate, 
-                        odoo_attachment_id=attachment_data['id']
-                    ).exists():
-                        CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
-                        has_new_attachments = True
-                except Exception as e:
-                    continue   
-
-            if has_new_attachments:
-                skill_summary = generate_candidate_skill_summary(candidate)
-                candidate.generated_skill_summary = skill_summary
-                candidate.save()
-            
-        except Exception as e:
-            return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"
 
     @staticmethod
     def _process_single_attachment(candidate, attachment_data, odoo_service):
@@ -311,7 +290,6 @@ class CandidateSyncService:
                 attachment.save()
                                 
             else:
-
                 attachment = CandidateAttachment(
                     candidate=candidate,
                     odoo_attachment_id=attachment_id,
@@ -334,12 +312,6 @@ class CandidateSyncService:
                 original_filename=attachment_name 
             )
             attachment.save()
-        try:
-            skill_summary = generate_candidate_skill_summary(candidate)
-            candidate.generated_skill_summary = skill_summary
-            candidate.save()
-        except Exception as e:
-            return f"Failed to regenerate skill summary after adding attachment: {str(e)}"
 
     @staticmethod
     def _get_file_extension(mimetype, original_filename):
@@ -368,3 +340,38 @@ class CandidateSyncService:
             clean_name = clean_name[:50]
         
         return f"candidate_attachment_{attachment_id}_{clean_name}{file_extension}"
+    
+
+    @staticmethod
+    def sync_attachments_for_candidate(candidate, odoo_service):
+        """Sync attachments for a single candidate"""
+        try:
+            
+            attachments = odoo_service.get_attachments(
+                res_model='hr.applicant',
+                res_id=candidate.odoo_candidate_id
+            )
+          
+            
+            for attachment_data in attachments:
+                try:
+                    if not CandidateAttachment.objects.filter(
+                        candidate=candidate, 
+                        odoo_attachment_id=attachment_data['id']
+                    ).exists():
+                        CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
+                        has_new_attachments = True
+                    else:
+                        return f"Attachment already exists, skipping: {attachment_data.get('name')}"
+                except Exception as e:
+                    continue   
+
+            if has_new_attachments:
+                skill_summary = generate_candidate_skill_summary(candidate)
+                candidate.generated_skill_summary = skill_summary
+                candidate.save()
+            else:
+                return f"No new attachments for {candidate.name}, not regenerating summary."
+                
+        except Exception as e:
+            return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"
