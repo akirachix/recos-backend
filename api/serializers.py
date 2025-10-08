@@ -8,7 +8,6 @@ from companies.models import Company
 from ai_reports.models import AIReport
 
 class CandidateAttachmentSerializer(serializers.ModelSerializer):
-    file_url = serializers.SerializerMethodField()
     download_url = serializers.SerializerMethodField()
     preview_url = serializers.SerializerMethodField()
     file_type_display = serializers.SerializerMethodField()
@@ -17,15 +16,10 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
         model = CandidateAttachment
         fields = [
             'attachment_id', 'candidate', 'name', 'original_filename',
-            'file_url', 'download_url', 'preview_url', 'file_type',
+            'download_url', 'preview_url', 'file_type',
             'file_type_display', 'file_size', 'sync_status', 'created_at'
         ]
         read_only_fields = ['attachment_id', 'created_at']
-    
-    def get_file_url(self, obj):
-        if obj.file:
-            return obj.file.url
-        return None
     
     def get_download_url(self, obj):
         return f"/api/candidates/{obj.candidate_id}/attachments/download/{obj.attachment_id}/"

@@ -1,7 +1,7 @@
 import google.genai as genai
 from google.genai import types
 from django.conf import settings
-
+import tempfile
 import json
 import os
 from .utils import extract_text_from_file
@@ -26,9 +26,10 @@ def generate_candidate_skill_summary(candidate):
         for attachment in candidate.attachments.all():
             if attachment.is_document():
                 try:
-                    text = extract_text_from_file(attachment.file.path)
+                    text = extract_text_from_file(attachment.file)
                     resume_text += f"\n\n--- Document: {attachment.name} ---\n{text}"
                 except Exception as e:
+                    print(f"Error extracting text from {attachment.name}: {e}")
                     continue
         
         if not resume_text.strip():

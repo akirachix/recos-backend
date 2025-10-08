@@ -383,6 +383,7 @@ def download_candidate_attachment(request, candidate_id, attachment_id):
             {'error': 'Attachment not found or access denied'}, 
             status=status.HTTP_404_NOT_FOUND
         )
+    
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_candidate_attachments(request, candidate_id):
@@ -1331,4 +1332,3 @@ class AIReportViewSet(viewsets.ModelViewSet):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="ai_report_{ai_report.report_id}.pdf"'
         return response
-
