@@ -77,6 +77,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recos.wsgi.application"
 
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_ROLE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY')
+SUPABASE_BUCKET_NAME =os.getenv('SUPABASE_BUCKET_NAME', 'candidate-attachments')
+
+DEFAULT_FILE_STORAGE = 'recos.storage_backends.SupabaseStorage'
+
 DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
 if not os.getenv("DATABASE_URL"):
     DATABASES = {
@@ -115,6 +121,8 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media') 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
