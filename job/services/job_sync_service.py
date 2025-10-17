@@ -8,8 +8,6 @@ from companies.models import Company
 from job.models import Job
 from job.services.ai_service import generate_job_summary
 
-
-
 class JobSyncService:
     @staticmethod
     def _parse_odoo_date(odoo_date_string):
@@ -23,12 +21,11 @@ class JobSyncService:
             return None
 
  
-
     @staticmethod
     def sync_jobs_for_company(company):
         try:
             recruiter = company.recruiter
-            odoo_creds = OdooCredentials.objects.filter(recruiter=recruiter).last()
+            odoo_creds = company.odoo_credentials
             if not odoo_creds:
                 raise ValueError("No Odoo credentials found for this recruiter")
                 
@@ -87,13 +84,13 @@ class JobSyncService:
             if not odoo_service.authenticate():
                 raise Exception("Failed to authenticate with Odoo")
             
-            odoo_jobs = odoo_service.get_jobs(user_id=odoo_creds.odoo_user_id)
+            odoo_jobs = odoo_service.get_jobs_by_user(user_id=odoo_creds.odoo_user_id)
             synced_jobs = []
             
             companies = Company.objects.filter(recruiter=recruiter)
             company_map = {company.odoo_company_id: company for company in companies if company.odoo_company_id}
             
-            for odoo_job in odoo_job:
+            for odoo_job in odoo_jobs:
                 odoo_company_id = None
                 if odoo_job.get('company_id') and isinstance(odoo_job['company_id'], list):
                     odoo_company_id = odoo_job['company_id'][0]
