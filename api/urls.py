@@ -1,5 +1,5 @@
 from rest_framework.routers import DefaultRouter
-from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet
+from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet, InterviewConversationCreateView
 from django.urls import path,include
 from . import views
 
@@ -44,4 +44,5 @@ urlpatterns = [
     path('api/auth/google/callback/', views.google_auth_callback, name='api_google_auth_callback'),
     path('update-profile/', views.update_profile, name='update-profile'),
     path('delete-account/', views.delete_account, name='delete-account'),
+    path('api/interview-conversations/', InterviewConversationCreateView.as_view(), name='interview-conversation-create'),
 ]

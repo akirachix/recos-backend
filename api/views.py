@@ -55,7 +55,6 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, permissions
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny 
@@ -392,9 +391,9 @@ def sync_candidate_attachments(request, candidate_id):
             job__company__recruiter=request.user
         )
         
-        odoo_creds = OdooCredentials.objects.filter(
-            recruiter=request.user
-        ).order_by('-created_at').first()
+        company = candidate.job.company
+        odoo_creds = company.odoo_credentials
+        
         
         if not odoo_creds:
             return Response(
@@ -415,9 +414,12 @@ def sync_candidate_attachments(request, candidate_id):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
-        from candidate.services.candidate_sync_service import CandidateSyncService
-        CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
+
+        if company.odoo_company_id:
+            odoo_service.set_company_context(company.odoo_company_id)
         
+        from candidate.services.candidate_sync_service import CandidateSyncService
+        result=CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
         attachments = CandidateAttachment.objects.filter(candidate=candidate)
         serializer = CandidateAttachmentSerializer(attachments, many=True)
         
@@ -480,6 +482,59 @@ class InterviewConversationViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return InterviewConversation.objects.filter(interview__recruiter=self.request.user)
+
+from rest_framework.authentication import TokenAuthentication
+
+class InterviewConversationCreateView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            data = request.data
+            interview_id = data.get('interview_id')
+            question_text = data.get('question_text', '')
+            candidate_answer = data.get('candidate_answer', '')
+            transcript_time = data.get('transcript_time')
+            expected_answer = data.get('expected_answer', '')
+
+            if not interview_id:
+                return Response(
+                    {'success': False, 'error': 'Interview ID is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                interview = Interview.objects.get(interview_id=interview_id)
+            except Interview.DoesNotExist:
+                return Response(
+                    {'success': False, 'error': 'Invalid interview ID'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            conversation = InterviewConversation.objects.create(
+                interview=interview,
+                question_text=question_text,
+                candidate_answer=candidate_answer,
+                transcript_time=transcript_time,
+                expected_answer=expected_answer
+            )
+
+            return Response(
+                {
+                    'success': True,
+                    'conversation_id': conversation.conversation_id,
+                    'interview_id': interview.interview_id,
+                    'message': 'Conversation saved successfully'
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            return Response(
+                {'success': False, 'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class JobViewSet(viewsets.ModelViewSet):
     serializer_class = JobSerializer
