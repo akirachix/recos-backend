@@ -1,22 +1,12 @@
+# candidate/services/ai_service.py
+import json
 import google.genai as genai
 from google.genai import types
 from django.conf import settings
-
-import json
-import os
-from .utils import extract_text_from_file
+from ai_reports.utils import extract_text_from_file_object
+from ai_reports.services.ai_analysis_service import get_genai_client, parse_gemini_response
 
 
-def get_genai_client():
-    try:
-        api_key = getattr(settings, 'GEMINI_API_KEY', None)
-        if not api_key:
-            return None
-            
-        return genai.Client(api_key=api_key)
-    except Exception as e:
-        return None
-    
 def generate_candidate_skill_summary(candidate):
     """
     Generate a skill summary for a candidate based on their resume attachments
@@ -26,7 +16,7 @@ def generate_candidate_skill_summary(candidate):
         for attachment in candidate.attachments.all():
             if attachment.is_document():
                 try:
-                    text = extract_text_from_file(attachment.file.path)
+                    text = extract_text_from_file_object(attachment.file)
                     resume_text += f"\n\n--- Document: {attachment.name} ---\n{text}"
                 except Exception as e:
                     continue
@@ -37,7 +27,6 @@ def generate_candidate_skill_summary(candidate):
         client = get_genai_client()
         if not client:
             return "AI service is not available. Please check API configuration."
-        
         
         prompt = f"""
         Analyze this candidate's resume and extract a comprehensive skill summary relevant to the job they're applying for.
@@ -98,18 +87,6 @@ def generate_candidate_skill_summary(candidate):
     except Exception as e:
         return f"Skill summary generation failed: {str(e)}"
 
-def parse_gemini_response(response_text):
-    """Parse Gemini response and extract JSON"""
-    try:
-        cleaned_text = response_text.strip()
-        if '```json' in cleaned_text:
-            cleaned_text = cleaned_text.split('```json')[1].split('```')[0].strip()
-        elif '```' in cleaned_text:
-            cleaned_text = cleaned_text.split('```')[1].split('```')[0].strip()
-        
-        return json.loads(cleaned_text)
-    except json.JSONDecodeError:
-        return {"raw_response": response_text}
 
 def format_skill_summary(skill_data):
     """Format the skill data into a readable summary"""
