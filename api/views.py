@@ -17,6 +17,7 @@ import os
 import random
 import requests
 from django.core.cache import cache
+from ai_reports.services.ai_analysis_service import AIAnalysisService
 
 from users.models import Recruiter, OdooCredentials
 from companies.models import Company
@@ -1170,6 +1171,7 @@ def draw_wrapped_text(p, text, x, y, max_width, font_name="Helvetica", font_size
         y -= line_height
     return y
 
+
 class AIReportViewSet(viewsets.ModelViewSet):
     queryset = AIReport.objects.all()
     
@@ -1178,74 +1180,111 @@ class AIReportViewSet(viewsets.ModelViewSet):
             return AIReportCreateSerializer
         return AIReportSerializer
 
-    @action(detail=False, methods=['get'], url_path=r'by-conversation/(?P<conversation_id>\d+)')
+    @action(detail=False, methods=['GET'], url_path=r'by-conversation/(?P<conversation_id>\d+)')
     def by_conversation(self, request, conversation_id=None):
         ai_reports = AIReport.objects.filter(conversation_id=conversation_id)
         serializer = AIReportSerializer(ai_reports, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['POST'])
     def generate_report(self, request):
-        conversation_id = request.data.get('conversation_id')
-        if not conversation_id:
+        interview_id = request.data.get('interview_id')
+        if not interview_id:
             return Response(
-                {'error': 'conversation_id is required'},
+                {'error': 'interview_id is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if AIReport.objects.filter(conversation_id=conversation_id).exists():
+        try:
+            # Use the AI service to generate the report
+            ai_service = AIAnalysisService()
+            ai_report = ai_service.generate_complete_ai_report(interview_id)
+            
+            if not ai_report:
+                return Response(
+                    {'error': 'Failed to generate AI report'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+                
+            serializer = AIReportSerializer(ai_report)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
             return Response(
-                {'error': 'AI report already exists for this conversation'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=['POST'])
+    def generate_skill_match(self, request):
+        candidate_id = request.data.get('candidate_id')
+        job_id = request.data.get('job_id')
         
-        ai_report_data = {
-            "conversation_id": conversation_id,
-            "skill_match_score": 78.25,
-            "final_match_score": 81.50,
-            "strengths": (
-                "The candidate demonstrated exceptional knowledge in Python and Django frameworks, articulating complex concepts with clarity and confidence. Throughout the discussion, they provided in-depth explanations of asynchronous programming, RESTful API design, and database optimization strategies. In addition, the candidate showcased a strong understanding of version control best practices and CI/CD pipelines, referencing real-world scenarios where these skills were crucial to project success. Their communication skills were evident as they broke down difficult problems into manageable components, offered insightful questions, and maintained a collaborative tone. Furthermore, the candidate's experience with cloud deployment and Docker containers was apparent, as they detailed step-by-step processes, potential pitfalls, and best practices for maintaining reliable production environments."
-            ),
-            "weaknesses": (
-                "While the candidate possesses a solid foundation in backend technologies, their exposure to frontend frameworks such as React and Angular appears limited. During the interview, the candidate struggled to articulate modern frontend design patterns and was unable to provide concrete examples of implementing state management or optimizing component performance. Additionally, the candidate showed some hesitation when asked about advanced database indexing techniques and had difficulty describing scenarios for using NoSQL solutions effectively. Time management during problem-solving was also a concern, as the candidate occasionally delved too deeply into specifics, resulting in incomplete answers for some questions."
-            ),
-            "overall_recommendation": (
-                "Based on the assessment, the candidate is recommended for advancement to the next stage, particularly for roles emphasizing backend development and cloud infrastructure. Their expertise in Python, Django, and DevOps practices would be a valuable asset to any engineering team. However, it is recommended that the candidate undertake additional training or mentorship in frontend technologies and database performance tuning to ensure well-roundedness in future projects. Providing opportunities for cross-functional collaboration and exposure to full-stack challenges would likely accelerate the candidate's growth and address current skill gaps. Overall, with focused professional development, the candidate is likely to become a high-impact contributor."
-            ),
-            "skills_breakdown": {
-                "Python": 90,
-                "Django": 85,
-                "REST APIs": 80,
-                "CI/CD": 75,
-                "Docker": 70,
-                "Cloud": 68,
-                "Frontend": 40,
-                "Database Optimization": 55
-            },
-            "initial_analysis": {
-                "Python": 45,
-                "Problem Solving": 38,
-                "Django": 30,
-                "Cloud": 20
-            },
-            "performance_analysis": {
-                "Attention to Detail": "High",
-                "Technical Skills": "High",
-                "Problem Solving": "Medium",
-                "AI Confidence": "High"
-            }
-        }
+        if not candidate_id or not job_id:
+            return Response(
+                {'error': 'Both candidate_id and job_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            from candidate.models import Candidate
+            from job.models import Job
+            
+            candidate = Candidate.objects.get(candidate_id=candidate_id)
+            job = Job.objects.get(job_id=job_id)
+            
+            ai_service = AIAnalysisService()
+            result = ai_service.calculate_skill_match_score(candidate, job)
+            
+            return Response(result, status=status.HTTP_200_OK)
+            
+        except (Candidate.DoesNotExist, Job.DoesNotExist) as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['POST'])
+    def generate_questions(self, request):
+        candidate_id = request.data.get('candidate_id')
+        job_id = request.data.get('job_id')
+        num_questions = request.data.get('num_questions', 5)
+        
+        if not candidate_id or not job_id:
+            return Response(
+                {'error': 'Both candidate_id and job_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            from candidate.models import Candidate
+            from job.models import Job
+            
+            candidate = Candidate.objects.get(candidate_id=candidate_id)
+            job = Job.objects.get(job_id=job_id)
+            
+            ai_service = AIAnalysisService()
+            questions = ai_service.generate_tailored_questions(candidate, job, num_questions)
+            
+            return Response({"questions": questions}, status=status.HTTP_200_OK)
+            
+        except (Candidate.DoesNotExist, Job.DoesNotExist) as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-        serializer = AIReportCreateSerializer(data=ai_report_data)
-        if serializer.is_valid():
-            serializer.save()
-            read_serializer = AIReportSerializer(serializer.instance)
-            return Response(read_serializer.data, status=status.HTTP_201_CREATED)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=['patch'])
+    @action(detail=True, methods=['PATCH'])
     def update_score(self, request, pk=None):
         ai_report = self.get_object()
         new_score = request.data.get('skill_match_score')
@@ -1272,7 +1311,7 @@ class AIReportViewSet(viewsets.ModelViewSet):
         serializer = AIReportSerializer(ai_report)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['GET'])
     def download_report(self, request, pk=None):
         ai_report = self.get_object()
         buffer = BytesIO()
@@ -1363,4 +1402,305 @@ class AIReportViewSet(viewsets.ModelViewSet):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="ai_report_{ai_report.report_id}.pdf"'
         return response
+    
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def add_tailored_questions_to_interview(request, interview_id):
+    try:
+        interview = Interview.objects.get(interview_id=interview_id, recruiter=request.user)
+        candidate = interview.candidate
+        job = candidate.job
+        
+        ai_service = AIAnalysisService()
+        questions = ai_service.generate_tailored_questions(candidate, job)
+        
+        # Create conversation entries for each question
+        created_conversations = []
+        for question in questions:
+            conversation = InterviewConversation.objects.create(
+                interview=interview,
+                question_text=question.get("question_text", ""),
+                expected_answer=question.get("expected_answer", "")
+            )
+            created_conversations.append(conversation)
+            
+        serializer = InterviewConversationSerializer(created_conversations, many=True)
+        return Response({
+            'message': f'Added {len(created_conversations)} tailored questions to interview',
+            'questions': serializer.data
+        }, status=status.HTTP_201_CREATED)
+        
+    except Interview.DoesNotExist:
+        return Response(
+            {'error': 'Interview not found or access denied'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_candidate_skill_match(request, candidate_id):
+    try:
+        candidate = Candidate.objects.get(candidate_id=candidate_id, job__company__recruiter=request.user)
+        job = candidate.job
+        
+        ai_service = AIAnalysisService()
+        result = ai_service.calculate_skill_match_score(candidate, job)
+        
+        return Response(result, status=status.HTTP_200_OK)
+        
+    except Candidate.DoesNotExist:
+        return Response(
+            {'error': 'Candidate not found or access denied'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+
+
+
+
+
+
+
+
+
+# MOck Interview Conversation
+# api/views.py (add this new view)
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+from interview.models import Interview
+from interviewConversation.models import InterviewConversation
+import random
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_mock_interview_conversations(request):
+    """
+    Create mock interview conversations for testing AI reports
+    """
+    try:
+        interview_id = request.data.get('interview_id')
+        if not interview_id:
+            return Response(
+                {'error': 'interview_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            interview = Interview.objects.get(interview_id=interview_id, recruiter=request.user)
+        except Interview.DoesNotExist:
+            return Response(
+                {'error': 'Interview not found or access denied'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Sample questions and answers for different job types
+        mock_data = get_mock_data_for_job(interview.candidate.job.job_title)
+        
+        # Create mock conversations
+        created_conversations = []
+        for i, qa in enumerate(mock_data):
+            conversation = InterviewConversation.objects.create(
+                interview=interview,
+                question_text=qa['question'],
+                expected_answer=qa['expected_answer'],
+                candidate_answer=qa['candidate_answer'],
+                transcript_time=f"2023-10-18T10:{30+i}:00"  # Mock timestamp
+            )
+            created_conversations.append(conversation)
+        
+        return Response({
+            'message': f'Created {len(created_conversations)} mock interview conversations',
+            'conversations': [
+                {
+                    'conversation_id': conv.conversation_id,
+                    'question_text': conv.question_text,
+                    'candidate_answer': conv.candidate_answer
+                }
+                for conv in created_conversations
+            ]
+        }, status=status.HTTP_201_CREATED)
+        
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+def get_mock_data_for_job(job_title):
+    """Get mock Q&A data based on job title"""
+    job_title_lower = job_title.lower()
+    
+    if 'developer' in job_title_lower or 'engineer' in job_title_lower:
+        return get_developer_mock_data()
+    elif 'designer' in job_title_lower:
+        return get_designer_mock_data()
+    elif 'manager' in job_title_lower:
+        return get_manager_mock_data()
+    elif 'analyst' in job_title_lower:
+        return get_analyst_mock_data()
+    else:
+        return get_general_mock_data()
+
+def get_developer_mock_data():
+    """Mock data for developer positions"""
+    return [
+        {
+            'question': 'Can you explain your experience with RESTful API design?',
+            'expected_answer': 'Candidate should discuss REST principles, HTTP methods, status codes, and API design best practices.',
+            'candidate_answer': 'I have extensive experience designing and implementing RESTful APIs. In my previous role, I designed a microservices architecture using REST principles, ensuring proper use of HTTP methods like GET, POST, PUT, and DELETE. I always pay attention to status codes and error handling to create robust APIs.'
+        },
+        {
+            'question': 'How do you approach debugging complex issues in your code?',
+            'expected_answer': 'Candidate should describe systematic debugging approaches, tools, and methodologies.',
+            'candidate_answer': 'When debugging complex issues, I start by reproducing the problem and understanding the expected behavior. I use logging strategically to narrow down the issue, and I\'m proficient with debugging tools like breakpoints in IDEs. For performance issues, I use profiling tools to identify bottlenecks. I also find that explaining the problem to someone else often helps me see the solution.'
+        },
+        {
+            'question': 'Describe a challenging technical problem you solved recently.',
+            'expected_answer': 'Candidate should provide a specific example with context, actions taken, and results.',
+            'candidate_answer': 'In my last project, we were facing significant performance issues with our database queries. I analyzed the query execution plans and identified several missing indexes. After implementing proper indexing and optimizing some complex queries, we reduced the average response time from 3 seconds to under 500ms. This significantly improved the user experience.'
+        },
+        {
+            'question': 'How do you ensure code quality in your projects?',
+            'expected_answer': 'Candidate should discuss code reviews, testing, standards, and best practices.',
+            'candidate_answer': 'I believe in a multi-faceted approach to code quality. I write comprehensive unit tests and integration tests. I participate actively in code reviews, both giving and receiving feedback. I follow coding standards and use linters to maintain consistency. I also document my code thoroughly and believe in refactoring regularly to keep the codebase clean.'
+        },
+        {
+            'question': 'How do you stay updated with the latest technology trends?',
+            'expected_answer': 'Candidate should describe learning habits, resources, and continuous improvement efforts.',
+            'candidate_answer': 'I dedicate time each week to learning new technologies. I follow industry blogs, subscribe to newsletters, and watch conference talks online. I also participate in online communities and contribute to open-source projects. Recently, I\'ve been exploring cloud-native technologies and containerization, which I believe will be valuable for this role.'
+        }
+    ]
+
+def get_designer_mock_data():
+    """Mock data for designer positions"""
+    return [
+        {
+            'question': 'Can you walk me through your design process?',
+            'expected_answer': 'Candidate should describe their design methodology from research to implementation.',
+            'candidate_answer': 'My design process starts with understanding the user needs and business goals. I conduct research, create user personas, and map user journeys. Then I move to ideation, creating wireframes and low-fidelity prototypes. After gathering feedback, I develop high-fidelity designs and work closely with developers to ensure accurate implementation. I believe in iterative design and continuous improvement based on user feedback.'
+        },
+        {
+            'question': 'How do you balance user needs with business requirements?',
+            'expected_answer': 'Candidate should discuss finding the intersection of user value and business goals.',
+            'candidate_answer': 'I believe the best solutions exist at the intersection of user needs and business goals. I start by deeply understanding both perspectives. When conflicts arise, I look for creative solutions that address both. For example, if a business requirement might negatively impact user experience, I explore alternative approaches that meet the business need while maintaining a positive user experience. I also use data to validate design decisions.'
+        },
+        {
+            'question': 'Describe a time when you had to defend your design decisions.',
+            'expected_answer': 'Candidate should provide an example of how they justified design choices with evidence.',
+            'candidate_answer': 'In a previous project, stakeholders wanted to add multiple features to the homepage, which I felt would clutter the interface and overwhelm users. I presented user research data showing that users were struggling with information overload. I created a prototype demonstrating my proposed solution and conducted A/B testing. The results showed my design performed significantly better in user engagement, which convinced the stakeholders to adopt my approach.'
+        },
+        {
+            'question': 'How do you approach designing for accessibility?',
+            'expected_answer': 'Candidate should discuss WCAG guidelines, inclusive design, and accessibility testing.',
+            'candidate_answer': 'Accessibility is a fundamental consideration in my design process. I follow WCAG guidelines and ensure proper color contrast, text sizing, and keyboard navigation. I use semantic HTML and ARIA labels to support screen readers. I also conduct accessibility testing with tools and, when possible, with users who have disabilities. I believe that designing for accessibility ultimately creates better experiences for all users.'
+        },
+        {
+            'question': 'How do you handle feedback and criticism of your work?',
+            'expected_answer': 'Candidate should demonstrate openness to feedback and ability to iterate.',
+            'candidate_answer': 'I welcome feedback as an opportunity to improve my work. I try to listen without being defensive and ask clarifying questions to fully understand the perspective. I separate my ego from my work and recognize that different viewpoints can reveal blind spots. I\'ve found that some of my best designs have come from incorporating feedback that initially challenged my assumptions.'
+        }
+    ]
+
+def get_manager_mock_data():
+    """Mock data for manager positions"""
+    return [
+        {
+            'question': 'How do you motivate your team members?',
+            'expected_answer': 'Candidate should discuss different motivation strategies and understanding individual needs.',
+            'candidate_answer': 'I believe motivation is not one-size-fits-all. I take time to understand each team member\'s values, goals, and what drives them. For some, it\'s recognition and public praise; for others, it\'s autonomy and challenging work. I ensure everyone understands how their work contributes to the bigger picture. I also provide regular feedback and growth opportunities. When possible, I involve the team in decision-making to give them ownership.'
+        },
+        {
+            'question': 'Describe a time you had to handle a conflict within your team.',
+            'expected_answer': 'Candidate should provide an example of conflict resolution.',
+            'candidate_answer': 'Two team members had different approaches to a project, which was causing tension. I scheduled separate meetings to understand each perspective, then brought them together to find common ground. I helped them see that both approaches had merit and could be combined. We established clear guidelines for decision-making moving forward. The conflict actually led to a better solution and improved their working relationship.'
+        },
+        {
+            'question': 'How do you balance team development with meeting deadlines?',
+            'expected_answer': 'Candidate should discuss prioritizing both people and results.',
+            'candidate_answer': 'I believe team development and meeting deadlines are not mutually exclusive. I plan projects with buffer time for learning and growth. I delegate tasks that stretch team members\' capabilities while providing support. When facing tight deadlines, I\'m transparent about the constraints and find creative ways to continue development, like post-project retrospectives or focused learning sessions. I also protect time for regular one-on-ones to discuss growth regardless of project pressures.'
+        },
+        {
+            'question': 'How do you evaluate your team\'s performance?',
+            'expected_answer': 'Candidate should discuss objective metrics, qualitative assessment, and regular feedback.',
+            'candidate_answer': 'I use a combination of quantitative and qualitative measures. I track metrics relevant to our work, but I also consider factors like collaboration, initiative, and growth. I conduct regular check-ins rather than relying solely on annual reviews. I encourage self-assessment and peer feedback. Most importantly, I focus on performance as a development tool rather than just evaluation, identifying strengths and areas for improvement.'
+        },
+        {
+            'question': 'How do you handle underperforming team members?',
+            'expected_answer': 'Candidate should discuss a structured approach to performance improvement.',
+            'candidate_answer': 'When I notice performance issues, I first seek to understand the root cause. I schedule a private conversation to discuss my observations and listen to their perspective. We work together to create an improvement plan with clear expectations and regular check-ins. I provide additional resources or support as needed. If performance doesn\'t improve despite these efforts, I follow the company\'s formal performance management process. Throughout, I maintain respect and focus on helping them succeed.'
+        }
+    ]
+
+def get_analyst_mock_data():
+    """Mock data for analyst positions"""
+    return [
+        {
+            'question': 'How do you approach data analysis projects?',
+            'expected_answer': 'Candidate should describe a structured approach to data analysis.',
+            'candidate_answer': 'I start by clearly defining the business question or problem. Then I identify the necessary data sources and assess their quality. I clean and prepare the data, which is often the most time-consuming part. I perform exploratory analysis to understand patterns and relationships. Based on insights, I select appropriate analytical methods. Finally, I visualize the results in a way that tells a clear story and provides actionable recommendations.'
+        },
+        {
+            'question': 'Describe a complex data analysis project you completed.',
+            'expected_answer': 'Candidate should provide a specific example with challenges and outcomes.',
+            'candidate_answer': 'In my previous role, I analyzed customer churn for a subscription service. The challenge was that churn was influenced by multiple factors with complex interactions. I built a predictive model using random forest to identify key drivers of churn. The analysis revealed that usage frequency in the first 30 days was the strongest predictor. Based on this insight, we implemented an onboarding program that increased engagement and reduced churn by 15% in six months.'
+        },
+        {
+            'question': 'How do you ensure the accuracy and reliability of your analysis?',
+            'expected_answer': 'Candidate should discuss validation methods and quality control.',
+            'candidate_answer': 'I use several techniques to ensure accuracy. I validate data sources and perform sanity checks on the data. I use appropriate statistical methods and test assumptions. When possible, I triangulate findings using multiple approaches. I also have colleagues review my work, especially for critical projects. I\'m transparent about limitations and uncertainties in my analysis. Finally, I document my methodology thoroughly so others can reproduce my results.'
+        },
+        {
+            'question': 'How do you communicate technical findings to non-technical stakeholders?',
+            'expected_answer': 'Candidate should discuss data storytelling and simplifying complex concepts.',
+            'candidate_answer': 'I focus on the business implications rather than technical details. I use clear visualizations and avoid jargon. I structure my communication around the key insights and recommendations. I often use analogies to explain complex concepts. I also anticipate questions and prepare explanations in advance. Most importantly, I tailor my communication to the audience\'s level of expertise and what they need to know to make decisions.'
+        },
+        {
+            'question': 'What data analysis tools and techniques are you most proficient with?',
+            'expected_answer': 'Candidate should list specific tools and their experience level.',
+            'candidate_answer': 'I\'m proficient with SQL for data extraction and manipulation. I use Python with pandas, NumPy, and scikit-learn for statistical analysis and machine learning. For visualization, I use Tableau and matplotlib. I\'m also experienced with Excel for quick analyses and dashboards. I\'m comfortable with both descriptive and inferential statistics, and I\'ve applied techniques like regression analysis, clustering, and classification in various projects.'
+        }
+    ]
+
+def get_general_mock_data():
+    """Mock data for general positions"""
+    return [
+        {
+            'question': 'Tell me about yourself and your professional background.',
+            'expected_answer': 'Candidate should provide a concise summary of their experience and skills.',
+            'candidate_answer': 'I have over 5 years of experience in my field, with a focus on delivering high-quality results. I\'ve worked in both small startups and larger organizations, which has given me a broad perspective. I\'m passionate about continuous learning and adapting to new challenges. In my previous role, I was recognized for my ability to collaborate effectively with cross-functional teams and deliver projects on time.'
+        },
+        {
+            'question': 'Why are you interested in this position and our company?',
+            'expected_answer': 'Candidate should demonstrate knowledge of the company and alignment with the role.',
+            'candidate_answer': 'I\'ve been following your company for some time and I\'m impressed with your innovative approach to [specific area]. This position aligns perfectly with my skills in [relevant skills] and my career goals. I\'m particularly excited about the opportunity to work on [specific project or aspect of the role]. I believe my experience would allow me to contribute value quickly while also growing with the company.'
+        },
+        {
+            'question': 'Describe a challenging situation you faced at work and how you handled it.',
+            'expected_answer': 'Candidate should provide a specific example with a positive outcome.',
+            'candidate_answer': 'In my previous role, we faced a tight deadline on a critical project with limited resources. I took the initiative to reorganize our workflow, prioritizing the most important features first. I also facilitated better communication between team members to ensure everyone was aligned. Through these efforts, we delivered the project on time and received positive feedback from stakeholders. This experience taught me the importance of adaptability and clear communication under pressure.'
+        },
+        {
+            'question': 'What are your greatest strengths and weaknesses?',
+            'expected_answer': 'Candidate should provide honest self-assessment with examples.',
+            'candidate_answer': 'My greatest strength is my problem-solving ability. I enjoy tackling complex challenges and finding creative solutions. For example, I once developed a new process that reduced project completion time by 20%. As for weaknesses, I used to struggle with delegating tasks, but I\'ve learned that trusting team members and empowering them leads to better outcomes. I\'ve been actively working on this by providing clear instructions and regular feedback.'
+        },
+        {
+            'question': 'Where do you see yourself in 5 years?',
+            'expected_answer': 'Candidate should show ambition and alignment with company growth.',
+            'candidate_answer': 'In 5 years, I hope to have grown both professionally and personally within your company. I aim to develop deeper expertise in my field while also taking on more leadership responsibilities. I\'m excited about the possibility of mentoring junior team members and contributing to strategic initiatives. I believe this position offers the right balance of challenges and growth opportunities to help me achieve these goals.'
+        }
+    ]
