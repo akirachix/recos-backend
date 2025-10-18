@@ -1148,29 +1148,6 @@ def sync_all_data(request):
         })
     except Exception as e:
         return Response({'error': f'Failed to sync data: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-@api_view(['GET'])
-def api_root(request, format=None):
-    return Response({
-        'message': 'Welcome to Recos API',
-        'endpoints': {
-            'register': reverse('register', request=request, format=format),
-            'login': reverse('login', request=request, format=format),
-            'logout': reverse('logout', request=request, format=format),
-            'forgot-password': reverse('forgot_password', request=request, format=format),
-            'verify-odoo': reverse('verify_odoo_account', request=request, format=format),
-            'odoo-credentials': reverse('add_odoo_credentials', request=request, format=format),
-            'odoo-credentials-list': reverse('get_odoo_credentials', request=request, format=format),
-            'companies': reverse('get_companies', request=request, format=format),
-            'users': reverse('recruiter_list', request=request, format=format),  
-            'sync-jobs-for-company': reverse('sync_jobs_for_company', args=[1], request=request, format=format),
-            'sync-all-data': reverse('sync_all_data', request=request, format=format),
-            'jobs-by-company': reverse('get_jobs_by_company', args=[1], request=request, format=format),
-            'candidates-by-job': reverse('get_candidates_by_job', args=[1], request=request, format=format),
-            'sync-candidates-for-job': reverse('sync_candidates_for_job', args=[1], request=request, format=format),
-            'interviews': reverse('interview-list', request=request, format=format),
-            'interview-conversations': reverse('interviewconversation-list', request=request, format=format),
-        }
-    })
     
 def draw_wrapped_text(p, text, x, y, max_width, font_name="Helvetica", font_size=12, line_height=16, page_margin=100, page_height=letter[1]):
     from reportlab.pdfbase.pdfmetrics import stringWidth

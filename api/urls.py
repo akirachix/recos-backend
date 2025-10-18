@@ -13,7 +13,6 @@ router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('', views.api_root, name='api_root'),
     path('register/', views.RecruiterRegistrationView.as_view(), name='register'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
