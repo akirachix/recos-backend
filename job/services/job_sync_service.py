@@ -18,9 +18,8 @@ class JobSyncService:
             naive_dt = parse_datetime(odoo_date_string)
             return timezone.make_aware(naive_dt)
         except (ValueError, TypeError):
-            return None
+            return None  
 
- 
     @staticmethod
     def sync_jobs_for_company(company):
         try:
@@ -38,7 +37,7 @@ class JobSyncService:
             
             if not odoo_service.authenticate():
                 raise Exception("Failed to authenticate with Odoo")
-           
+        
             if not company.odoo_company_id:
                 return []
                 
@@ -47,13 +46,17 @@ class JobSyncService:
             synced_jobs = []
             
             for odoo_job in odoo_jobs:
+                job_description = odoo_job.get('description', '')
+                if job_description is False or job_description == 'False':
+                    job_description = ''
+                
                 job, created = Job.objects.update_or_create(
                     company=company,
                     odoo_job_id=odoo_job['id'], 
                     defaults={
                         'job_title': odoo_job['name'],
-                        'job_description': odoo_job.get('description', ''),
-                        'generated_job_summary': generate_job_summary(odoo_job.get('description', '')),
+                        'job_description': job_description,
+                        'generated_job_summary': generate_job_summary(job_description) if job_description else 'No job description available for summary generation.',
                         'state': odoo_job.get('state', 'open'),
                         'expired_at': timezone.now() + timedelta(days=365),
                         'posted_at': JobSyncService._parse_odoo_date(odoo_job.get('create_date'))
