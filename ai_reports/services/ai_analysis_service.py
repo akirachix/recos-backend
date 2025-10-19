@@ -1,4 +1,3 @@
-# ai_reports/services/ai_analysis_service.py
 import json
 import google.genai as genai
 from google.genai import types
@@ -18,7 +17,6 @@ def get_genai_client():
             
         return genai.Client(api_key=api_key)
     except Exception as e:
-        print(f"Error initializing GenAI client: {e}")
         return None
 
 
@@ -33,7 +31,6 @@ def parse_gemini_response(response_text):
         
         return json.loads(cleaned_text)
     except json.JSONDecodeError as e:
-        print(f"Error parsing JSON response: {e}")
         return {"raw_response": response_text}
 
 
@@ -56,7 +53,6 @@ class AIAnalysisService:
         if not cv_attachments.exists():
             return ""
             
-        # Use the most recent CV attachment
         latest_cv = cv_attachments.latest('created_at')
         return self.extract_text_from_attachment(latest_cv)
     
@@ -115,7 +111,6 @@ class AIAnalysisService:
             result = parse_gemini_response(response.text)
             return result
         except Exception as e:
-            print(f"Error calculating skill match score: {e}")
             return {"overall_score": 0.0, "skills_breakdown": {}}
     
     def generate_tailored_questions(self, candidate, job, num_questions=5):
@@ -177,7 +172,6 @@ class AIAnalysisService:
             result = parse_gemini_response(response.text)
             return result.get("questions", [])
         except Exception as e:
-            print(f"Error generating tailored questions: {e}")
             return []
     
     def analyze_interview_performance(self, interview_id):
@@ -202,13 +196,11 @@ class AIAnalysisService:
                 "performance_analysis": {}
             }
             
-        # Get the interview to access the associated job and candidate
         from interview.models import Interview
         interview = Interview.objects.get(interview_id=interview_id)
         candidate = interview.candidate
         job = candidate.job
         
-        # Format conversations for analysis
         conversation_text = ""
         for conv in conversations:
             conversation_text += f"Q: {conv.question_text}\n"
@@ -268,7 +260,6 @@ class AIAnalysisService:
             result = parse_gemini_response(response.text)
             return result
         except Exception as e:
-            print(f"Error analyzing interview performance: {e}")
             return {
                 "final_match_score": 0.0,
                 "strengths": "",
@@ -285,14 +276,11 @@ class AIAnalysisService:
         try:
             interview = Interview.objects.get(interview_id=interview_id)
             candidate = interview.candidate
-            job = candidate.job  # This ensures we're using the correct job associated with the candidate
-            
-            # Calculate skill match score
+            job = candidate.job  
             skill_match_result = self.calculate_skill_match_score(candidate, job)
             skill_match_score = skill_match_result.get("overall_score", 0.0)
             skills_breakdown = skill_match_result.get("skills_breakdown", {})
             
-            # Analyze interview performance
             performance_result = self.analyze_interview_performance(interview_id)
             final_match_score = performance_result.get("final_match_score", 0.0)
             strengths = performance_result.get("strengths", "")
@@ -300,10 +288,8 @@ class AIAnalysisService:
             overall_recommendation = performance_result.get("overall_recommendation", "")
             performance_analysis = performance_result.get("performance_analysis", {})
             
-            # Generate tailored questions
             tailored_questions = self.generate_tailored_questions(candidate, job)
             
-            # Create or update AI report
             ai_report, created = AIReport.objects.update_or_create(
                 conversation_id=InterviewConversation.objects.filter(interview_id=interview_id).first(),
                 defaults={
@@ -320,5 +306,4 @@ class AIAnalysisService:
             
             return ai_report
         except Exception as e:
-            print(f"Error generating complete AI report: {e}")
             return None

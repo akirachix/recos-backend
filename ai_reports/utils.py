@@ -1,4 +1,3 @@
-# ai_reports/utils.py
 import os
 import PyPDF2
 import docx
@@ -22,9 +21,8 @@ def extract_text_from_file_object(file_obj):
         return ""
         
     file_content = file_obj.read()
-    file_obj.seek(0)  # Reset file pointer
+    file_obj.seek(0)  
     
-    # Determine file type from file object
     if hasattr(file_obj, 'name'):
         file_name = file_obj.name.lower()
         if file_name.endswith('.pdf'):

@@ -1,4 +1,3 @@
-# candidate/services/ai_service.py
 import json
 import google.genai as genai
 from google.genai import types
