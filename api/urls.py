@@ -1,5 +1,5 @@
 from rest_framework.routers import DefaultRouter
-from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet
+from .views import InterviewConversationViewSet, JobViewSet, CandidateViewSet, AIReportViewSet, InterviewViewSet, InterviewConversationCreateView
 from django.urls import path,include
 from . import views
 
@@ -13,7 +13,6 @@ router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
 
 urlpatterns = [
     path('', include(router.urls)),
-    path('', views.api_root, name='api_root'),
     path('register/', views.RecruiterRegistrationView.as_view(), name='register'),
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
@@ -44,4 +43,9 @@ urlpatterns = [
     path('api/auth/google/callback/', views.google_auth_callback, name='api_google_auth_callback'),
     path('update-profile/', views.update_profile, name='update-profile'),
     path('delete-account/', views.delete_account, name='delete-account'),
+    path('api/interview-conversations/', InterviewConversationCreateView.as_view(), name='interview-conversation-create'),
+    path('ai-reports/generate-skill-match/', views.AIReportViewSet.as_view({'post': 'generate_skill_match'}), name='generate-skill-match'),
+    path('ai-reports/generate-questions/', views.AIReportViewSet.as_view({'post': 'generate_questions'}), name='generate-questions'),
+    path('interviews/<int:interview_id>/add-tailored-questions/', views.add_tailored_questions_to_interview, name='add-tailored-questions'),
+    path('candidates/<int:candidate_id>/skill-match/', views.get_candidate_skill_match, name='get-candidate-skill-match'),
 ]

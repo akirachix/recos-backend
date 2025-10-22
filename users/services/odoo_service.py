@@ -45,6 +45,13 @@ class OdooService:
                 raise Exception("Authentication failed")
         endpoint = urljoin(self.db_url, '/jsonrpc')
         headers = {'Content-Type': 'application/json'}
+
+        if kwargs is None:
+            kwargs = {}
+    
+        if self.context:
+            kwargs['context'] = self.context
+
         payload = {
             "jsonrpc": "2.0",
             "method": "call",
@@ -177,22 +184,29 @@ class OdooService:
             [[]],
             {'fields': ['id', 'name', 'country_id']}
         )
+
     def get_attachments(self, res_model, res_id):
         """Get attachments for a specific model and record ID"""
         domain = [
             ('res_model', '=', res_model),
-            ('res_id', '=', res_id)
+            ('res_id', '=', res_id),
+            ('type', '=', 'binary')  
         ]
         fields = [
             'id', 'name', 'mimetype', 'file_size', 'type',
             'res_model', 'res_id', 'create_date', 'datas'
         ]
-        return self.call_odoo(
-            'ir.attachment',
-            'search_read',
-            [domain],
-            {'fields': fields}
-        )
+        try:
+            result = self.call_odoo(
+                'ir.attachment',
+                'search_read',
+                [domain],
+                {'fields': fields}
+            )
+            return result
+        except Exception as e:
+            return []
+    
     def get_attachment_content(self, attachment_id):
         """Get the actual file content with base64 data"""
         try:
