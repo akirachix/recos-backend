@@ -17,6 +17,7 @@ import os
 import random
 import requests
 from django.core.cache import cache
+from ai_reports.services.ai_analysis_service import AIAnalysisService
 
 from users.models import Recruiter, OdooCredentials
 from companies.models import Company
@@ -55,7 +56,6 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status, permissions
-from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny 
@@ -392,9 +392,9 @@ def sync_candidate_attachments(request, candidate_id):
             job__company__recruiter=request.user
         )
         
-        odoo_creds = OdooCredentials.objects.filter(
-            recruiter=request.user
-        ).order_by('-created_at').first()
+        company = candidate.job.company
+        odoo_creds = company.odoo_credentials
+        
         
         if not odoo_creds:
             return Response(
@@ -415,9 +415,12 @@ def sync_candidate_attachments(request, candidate_id):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
-        from candidate.services.candidate_sync_service import CandidateSyncService
-        CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
+
+        if company.odoo_company_id:
+            odoo_service.set_company_context(company.odoo_company_id)
         
+        from candidate.services.candidate_sync_service import CandidateSyncService
+        result=CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
         attachments = CandidateAttachment.objects.filter(candidate=candidate)
         serializer = CandidateAttachmentSerializer(attachments, many=True)
         
@@ -480,6 +483,59 @@ class InterviewConversationViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         return InterviewConversation.objects.filter(interview__recruiter=self.request.user)
+
+from rest_framework.authentication import TokenAuthentication
+
+class InterviewConversationCreateView(APIView):
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            data = request.data
+            interview_id = data.get('interview_id')
+            question_text = data.get('question_text', '')
+            candidate_answer = data.get('candidate_answer', '')
+            transcript_time = data.get('transcript_time')
+            expected_answer = data.get('expected_answer', '')
+
+            if not interview_id:
+                return Response(
+                    {'success': False, 'error': 'Interview ID is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                interview = Interview.objects.get(interview_id=interview_id)
+            except Interview.DoesNotExist:
+                return Response(
+                    {'success': False, 'error': 'Invalid interview ID'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            conversation = InterviewConversation.objects.create(
+                interview=interview,
+                question_text=question_text,
+                candidate_answer=candidate_answer,
+                transcript_time=transcript_time,
+                expected_answer=expected_answer
+            )
+
+            return Response(
+                {
+                    'success': True,
+                    'conversation_id': conversation.conversation_id,
+                    'interview_id': interview.interview_id,
+                    'message': 'Conversation saved successfully'
+                },
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            return Response(
+                {'success': False, 'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class JobViewSet(viewsets.ModelViewSet):
     serializer_class = JobSerializer
@@ -1093,29 +1149,6 @@ def sync_all_data(request):
         })
     except Exception as e:
         return Response({'error': f'Failed to sync data: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
-@api_view(['GET'])
-def api_root(request, format=None):
-    return Response({
-        'message': 'Welcome to Recos API',
-        'endpoints': {
-            'register': reverse('register', request=request, format=format),
-            'login': reverse('login', request=request, format=format),
-            'logout': reverse('logout', request=request, format=format),
-            'forgot-password': reverse('forgot_password', request=request, format=format),
-            'verify-odoo': reverse('verify_odoo_account', request=request, format=format),
-            'odoo-credentials': reverse('add_odoo_credentials', request=request, format=format),
-            'odoo-credentials-list': reverse('get_odoo_credentials', request=request, format=format),
-            'companies': reverse('get_companies', request=request, format=format),
-            'users': reverse('recruiter_list', request=request, format=format),  
-            'sync-jobs-for-company': reverse('sync_jobs_for_company', args=[1], request=request, format=format),
-            'sync-all-data': reverse('sync_all_data', request=request, format=format),
-            'jobs-by-company': reverse('get_jobs_by_company', args=[1], request=request, format=format),
-            'candidates-by-job': reverse('get_candidates_by_job', args=[1], request=request, format=format),
-            'sync-candidates-for-job': reverse('sync_candidates_for_job', args=[1], request=request, format=format),
-            'interviews': reverse('interview-list', request=request, format=format),
-            'interview-conversations': reverse('interviewconversation-list', request=request, format=format),
-        }
-    })
     
 def draw_wrapped_text(p, text, x, y, max_width, font_name="Helvetica", font_size=12, line_height=16, page_margin=100, page_height=letter[1]):
     from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -1138,6 +1171,7 @@ def draw_wrapped_text(p, text, x, y, max_width, font_name="Helvetica", font_size
         y -= line_height
     return y
 
+
 class AIReportViewSet(viewsets.ModelViewSet):
     queryset = AIReport.objects.all()
     
@@ -1146,74 +1180,110 @@ class AIReportViewSet(viewsets.ModelViewSet):
             return AIReportCreateSerializer
         return AIReportSerializer
 
-    @action(detail=False, methods=['get'], url_path=r'by-conversation/(?P<conversation_id>\d+)')
+    @action(detail=False, methods=['GET'], url_path=r'by-conversation/(?P<conversation_id>\d+)')
     def by_conversation(self, request, conversation_id=None):
         ai_reports = AIReport.objects.filter(conversation_id=conversation_id)
         serializer = AIReportSerializer(ai_reports, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['POST'])
     def generate_report(self, request):
-        conversation_id = request.data.get('conversation_id')
-        if not conversation_id:
+        interview_id = request.data.get('interview_id')
+        if not interview_id:
             return Response(
-                {'error': 'conversation_id is required'},
+                {'error': 'interview_id is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if AIReport.objects.filter(conversation_id=conversation_id).exists():
+        try:
+            ai_service = AIAnalysisService()
+            ai_report = ai_service.generate_complete_ai_report(interview_id)
+            
+            if not ai_report:
+                return Response(
+                    {'error': 'Failed to generate AI report'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+                
+            serializer = AIReportSerializer(ai_report)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
             return Response(
-                {'error': 'AI report already exists for this conversation'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=False, methods=['POST'])
+    def generate_skill_match(self, request):
+        candidate_id = request.data.get('candidate_id')
+        job_id = request.data.get('job_id')
         
-        ai_report_data = {
-            "conversation_id": conversation_id,
-            "skill_match_score": 78.25,
-            "final_match_score": 81.50,
-            "strengths": (
-                "The candidate demonstrated exceptional knowledge in Python and Django frameworks, articulating complex concepts with clarity and confidence. Throughout the discussion, they provided in-depth explanations of asynchronous programming, RESTful API design, and database optimization strategies. In addition, the candidate showcased a strong understanding of version control best practices and CI/CD pipelines, referencing real-world scenarios where these skills were crucial to project success. Their communication skills were evident as they broke down difficult problems into manageable components, offered insightful questions, and maintained a collaborative tone. Furthermore, the candidate's experience with cloud deployment and Docker containers was apparent, as they detailed step-by-step processes, potential pitfalls, and best practices for maintaining reliable production environments."
-            ),
-            "weaknesses": (
-                "While the candidate possesses a solid foundation in backend technologies, their exposure to frontend frameworks such as React and Angular appears limited. During the interview, the candidate struggled to articulate modern frontend design patterns and was unable to provide concrete examples of implementing state management or optimizing component performance. Additionally, the candidate showed some hesitation when asked about advanced database indexing techniques and had difficulty describing scenarios for using NoSQL solutions effectively. Time management during problem-solving was also a concern, as the candidate occasionally delved too deeply into specifics, resulting in incomplete answers for some questions."
-            ),
-            "overall_recommendation": (
-                "Based on the assessment, the candidate is recommended for advancement to the next stage, particularly for roles emphasizing backend development and cloud infrastructure. Their expertise in Python, Django, and DevOps practices would be a valuable asset to any engineering team. However, it is recommended that the candidate undertake additional training or mentorship in frontend technologies and database performance tuning to ensure well-roundedness in future projects. Providing opportunities for cross-functional collaboration and exposure to full-stack challenges would likely accelerate the candidate's growth and address current skill gaps. Overall, with focused professional development, the candidate is likely to become a high-impact contributor."
-            ),
-            "skills_breakdown": {
-                "Python": 90,
-                "Django": 85,
-                "REST APIs": 80,
-                "CI/CD": 75,
-                "Docker": 70,
-                "Cloud": 68,
-                "Frontend": 40,
-                "Database Optimization": 55
-            },
-            "initial_analysis": {
-                "Python": 45,
-                "Problem Solving": 38,
-                "Django": 30,
-                "Cloud": 20
-            },
-            "performance_analysis": {
-                "Attention to Detail": "High",
-                "Technical Skills": "High",
-                "Problem Solving": "Medium",
-                "AI Confidence": "High"
-            }
-        }
+        if not candidate_id or not job_id:
+            return Response(
+                {'error': 'Both candidate_id and job_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            from candidate.models import Candidate
+            from job.models import Job
+            
+            candidate = Candidate.objects.get(candidate_id=candidate_id)
+            job = Job.objects.get(job_id=job_id)
+            
+            ai_service = AIAnalysisService()
+            result = ai_service.calculate_skill_match_score(candidate, job)
+            
+            return Response(result, status=status.HTTP_200_OK)
+            
+        except (Candidate.DoesNotExist, Job.DoesNotExist) as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['POST'])
+    def generate_questions(self, request):
+        candidate_id = request.data.get('candidate_id')
+        job_id = request.data.get('job_id')
+        num_questions = request.data.get('num_questions', 5)
+        
+        if not candidate_id or not job_id:
+            return Response(
+                {'error': 'Both candidate_id and job_id are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        try:
+            from candidate.models import Candidate
+            from job.models import Job
+            
+            candidate = Candidate.objects.get(candidate_id=candidate_id)
+            job = Job.objects.get(job_id=job_id)
+            
+            ai_service = AIAnalysisService()
+            questions = ai_service.generate_tailored_questions(candidate, job, num_questions)
+            
+            return Response({"questions": questions}, status=status.HTTP_200_OK)
+            
+        except (Candidate.DoesNotExist, Job.DoesNotExist) as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
-        serializer = AIReportCreateSerializer(data=ai_report_data)
-        if serializer.is_valid():
-            serializer.save()
-            read_serializer = AIReportSerializer(serializer.instance)
-            return Response(read_serializer.data, status=status.HTTP_201_CREATED)
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    @action(detail=True, methods=['patch'])
+    @action(detail=True, methods=['PATCH'])
     def update_score(self, request, pk=None):
         ai_report = self.get_object()
         new_score = request.data.get('skill_match_score')
@@ -1240,7 +1310,7 @@ class AIReportViewSet(viewsets.ModelViewSet):
         serializer = AIReportSerializer(ai_report)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=['GET'])
     def download_report(self, request, pk=None):
         ai_report = self.get_object()
         buffer = BytesIO()
@@ -1331,4 +1401,64 @@ class AIReportViewSet(viewsets.ModelViewSet):
         response = HttpResponse(buffer, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="ai_report_{ai_report.report_id}.pdf"'
         return response
+    
 
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def add_tailored_questions_to_interview(request, interview_id):
+    try:
+        interview = Interview.objects.get(interview_id=interview_id, recruiter=request.user)
+        candidate = interview.candidate
+        job = candidate.job
+        
+        ai_service = AIAnalysisService()
+        questions = ai_service.generate_tailored_questions(candidate, job)
+        
+        created_conversations = []
+        for question in questions:
+            conversation = InterviewConversation.objects.create(
+                interview=interview,
+                question_text=question.get("question_text", ""),
+                expected_answer=question.get("expected_answer", "")
+            )
+            created_conversations.append(conversation)
+            
+        serializer = InterviewConversationSerializer(created_conversations, many=True)
+        return Response({
+            'message': f'Added {len(created_conversations)} tailored questions to interview',
+            'questions': serializer.data
+        }, status=status.HTTP_201_CREATED)
+        
+    except Interview.DoesNotExist:
+        return Response(
+            {'error': 'Interview not found or access denied'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_candidate_skill_match(request, candidate_id):
+    try:
+        candidate = Candidate.objects.get(candidate_id=candidate_id, job__company__recruiter=request.user)
+        job = candidate.job
+        
+        ai_service = AIAnalysisService()
+        result = ai_service.calculate_skill_match_score(candidate, job)
+        
+        return Response(result, status=status.HTTP_200_OK)
+        
+    except Candidate.DoesNotExist:
+        return Response(
+            {'error': 'Candidate not found or access denied'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
