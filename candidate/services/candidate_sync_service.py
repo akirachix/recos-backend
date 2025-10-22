@@ -10,8 +10,6 @@ from job.models import Job
 from datetime import timezone, timedelta
 from candidate.services.ai_service import generate_candidate_skill_summary
 
-
-
 class CandidateSyncService:
     @staticmethod
     def sync_candidates_for_job(job, odoo_service=None):
@@ -19,11 +17,7 @@ class CandidateSyncService:
         try:            
             if not odoo_service:
                 recruiter = job.company.recruiter
-                
-                odoo_creds = OdooCredentials.objects.filter(
-                    recruiter=recruiter
-                ).order_by('-created_at').first()
-                
+                odoo_creds = job.company.odoo_credentials
                 if not odoo_creds:
                     raise ValueError("No Odoo credentials found for this recruiter")
                 
@@ -40,21 +34,17 @@ class CandidateSyncService:
             if not job.odoo_job_id:
                 return []
                 
-            odoo_candidates = odoo_service.get_candidates(job_id=job.odoo_job_id)
-
+            odoo_candidates = odoo_service.get_candidates(job_id=job.odoo_job_id, company_id=job.company.odoo_company_id)
             
             synced_candidates = []
             for odoo_candidate in odoo_candidates:
                 try:
                     candidate = CandidateSyncService._process_single_candidate(odoo_candidate, job)
-                    
                     CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
-
                     if candidate.attachments.exists():
                         skill_summary = generate_candidate_skill_summary(candidate)
                         candidate.generated_skill_summary = skill_summary
                         candidate.save()
-                    
                     synced_candidates.append(candidate)
                 except Exception as e:
                     continue
@@ -67,9 +57,7 @@ class CandidateSyncService:
     @staticmethod
     def _process_single_candidate(odoo_candidate, job):
         """Process a single candidate from Odoo"""
-        
         candidate_name = odoo_candidate.get('partner_name', 'Unknown Candidate')
-        
         stage_data = odoo_candidate.get('stage_id', [False, 'Applied'])
         if isinstance(stage_data, list) and len(stage_data) > 1:
             stage_name = stage_data[1]
@@ -111,10 +99,7 @@ class CandidateSyncService:
         try:
             if not odoo_service:
                 recruiter = company.recruiter
-                odoo_creds = OdooCredentials.objects.filter(
-                    recruiter=recruiter
-                ).order_by('-created_at').first()
-                
+                odoo_creds = company.odoo_credentials
                 if not odoo_creds:
                     raise ValueError("No Odoo credentials found for this recruiter")
                 
@@ -171,7 +156,6 @@ class CandidateSyncService:
                     
                     candidate = CandidateSyncService._process_single_candidate(odoo_candidate, matching_job)
                     CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
-                    
                     synced_count += 1
                     
                 except Exception as e:
@@ -251,11 +235,10 @@ class CandidateSyncService:
         attachment_name = attachment_data.get('name', f'attachment_{attachment_id}')
         attachment_type = attachment_data.get('mimetype', 'application/octet-stream')
         
-        if CandidateAttachment.objects.filter(
+        existing_attachment = CandidateAttachment.objects.filter(
             candidate=candidate, 
             odoo_attachment_id=attachment_id
-        ).exists():
-            return
+        ).first()
         
         try:
             attachment_detail = odoo_service.get_attachment_content(attachment_id)
@@ -277,18 +260,49 @@ class CandidateSyncService:
                     attachment_id
                 )
                 
-                attachment = CandidateAttachment(
-                    candidate=candidate,
-                    odoo_attachment_id=attachment_id,
-                    name=attachment_name,
-                    file_type=attachment_type,
-                    file_size=len(file_content),
-                    original_filename=original_filename
-                )
-                
-                attachment.file.save(file_name, ContentFile(file_content))
-                attachment.save()
+                if existing_attachment:
+                    existing_attachment.name = attachment_name
+                    existing_attachment.file_type = attachment_type
+                    existing_attachment.file_size = len(file_content)
+                    existing_attachment.original_filename = original_filename
+                    existing_attachment.sync_status = 'completed'
+                    if existing_attachment.file:
+                        existing_attachment.file.delete(save=False)
+                    existing_attachment.file.save(file_name, ContentFile(file_content))
+                    existing_attachment.save()
+                else:
+                    attachment = CandidateAttachment(
+                        candidate=candidate,
+                        odoo_attachment_id=attachment_id,
+                        name=attachment_name,
+                        file_type=attachment_type,
+                        file_size=len(file_content),
+                        original_filename=original_filename,
+                        sync_status='completed'
+                    )
+                    attachment.file.save(file_name, ContentFile(file_content))
+                    attachment.save()
                                 
+            else:
+                if existing_attachment:
+                    existing_attachment.sync_status = 'failed'
+                    existing_attachment.save()
+                else:
+                    attachment = CandidateAttachment(
+                        candidate=candidate,
+                        odoo_attachment_id=attachment_id,
+                        name=attachment_name,
+                        file_type=attachment_type,
+                        file_size=0,
+                        sync_status='failed',
+                        original_filename=attachment_name  
+                    )
+                    attachment.save()
+                
+        except Exception as e:
+            if existing_attachment:
+                existing_attachment.sync_status = 'failed'
+                existing_attachment.save()
             else:
                 attachment = CandidateAttachment(
                     candidate=candidate,
@@ -297,21 +311,9 @@ class CandidateSyncService:
                     file_type=attachment_type,
                     file_size=0,
                     sync_status='failed',
-                    original_filename=attachment_name  
+                    original_filename=attachment_name 
                 )
                 attachment.save()
-                
-        except Exception as e:
-            attachment = CandidateAttachment(
-                candidate=candidate,
-                odoo_attachment_id=attachment_id,
-                name=attachment_name,
-                file_type=attachment_type,
-                file_size=0,
-                sync_status='failed',
-                original_filename=attachment_name 
-            )
-            attachment.save()
 
     @staticmethod
     def _get_file_extension(mimetype, original_filename):
@@ -338,40 +340,52 @@ class CandidateSyncService:
         
         if len(clean_name) > 50:
             clean_name = clean_name[:50]
-        
         return f"candidate_attachment_{attachment_id}_{clean_name}{file_extension}"
     
-
     @staticmethod
     def sync_attachments_for_candidate(candidate, odoo_service):
-        """Sync attachments for a single candidate"""
+        """Perform a full re-sync of attachments for a single candidate from Odoo."""
         try:
-            
+            deleted_count, _ = CandidateAttachment.objects.filter(candidate=candidate).delete()
+
+            try:
+                applicant_data = odoo_service.call_odoo(
+                    'hr.applicant',
+                    'read',
+                    [[candidate.odoo_candidate_id]],
+                    {'fields': ['attachment_number']}
+                )
+                attachment_number = applicant_data[0].get('attachment_number', 0) if applicant_data else 0
+            except Exception as e:
+                attachment_number = 0
+
             attachments = odoo_service.get_attachments(
                 res_model='hr.applicant',
                 res_id=candidate.odoo_candidate_id
             )
-          
-            
+        
+            synced_count = 0
+            failed_count = 0
             for attachment_data in attachments:
                 try:
-                    if not CandidateAttachment.objects.filter(
-                        candidate=candidate, 
-                        odoo_attachment_id=attachment_data['id']
-                    ).exists():
-                        CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
-                        has_new_attachments = True
-                    else:
-                        return f"Attachment already exists, skipping: {attachment_data.get('name')}"
+                    CandidateSyncService._process_single_attachment(candidate, attachment_data, odoo_service)
+                    synced_count += 1
                 except Exception as e:
-                    continue   
-
-            if has_new_attachments:
+                    failed_count += 1
+                    continue
+        
+            if synced_count > 0:
                 skill_summary = generate_candidate_skill_summary(candidate)
                 candidate.generated_skill_summary = skill_summary
                 candidate.save()
+                return f"Successfully re-synced {synced_count} attachments for {candidate.name}."
             else:
-                return f"No new attachments for {candidate.name}, not regenerating summary."
-                
+                if len(attachments) > 0:
+                    return f"Fetched {len(attachments)} attachments from Odoo, but synced 0 due to {failed_count} processing errors. Check logs for details (e.g., duplicates or save failures)."
+                elif attachment_number > 0:
+                    return f"Odoo reports {attachment_number} attachments, but fetch returned 0. Check permissions, domain, or multi-company context."
+                else:
+                    return f"No attachments found in Odoo for candidate {candidate.name} (ID: {candidate.odoo_candidate_id})."
+                    
         except Exception as e:
-            return f"Error syncing attachments for candidate {candidate.name}: {str(e)}"
+            return f"Error during attachment sync for candidate {candidate.name}: {str(e)}"

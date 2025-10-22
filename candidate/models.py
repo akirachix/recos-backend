@@ -33,7 +33,7 @@ class Candidate(models.Model):
 class CandidateAttachment(models.Model):
     attachment_id = models.AutoField(primary_key=True)
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name='attachments')
-    odoo_attachment_id = models.IntegerField(unique=True)
+    odoo_attachment_id = models.IntegerField()
     name = models.CharField(max_length=255)
     original_filename = models.CharField(max_length=255, blank=True, null=True)
     file = models.FileField(upload_to='candidate_attachments/%Y/%m/%d/')
