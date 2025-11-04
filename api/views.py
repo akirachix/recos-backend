@@ -441,6 +441,54 @@ def sync_candidate_attachments(request, candidate_id):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+from django.db.models import Count, Q
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def job_summary(request):
+    """
+    Returns a summary of each job for the current user, including candidate and interview counts.
+    """
+    company_id = request.query_params.get('company_id')
+    if not company_id:
+        return Response({"error": "company_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    jobs = Job.objects.filter(company__recruiter=request.user, company_id=company_id).annotate(
+        total_candidates=Count('candidates', distinct=True),
+        scheduled_interviews=Count('candidates__interviews', filter=Q(candidates__interviews__status__in=['scheduled', 'in_progress']), distinct=True),
+        interviews_done=Count('candidates__interviews__conversations', distinct=True)
+    )
+    
+    summary = []
+    for job in jobs:
+        summary.append({
+            'job_id': job.job_id,
+            'job_title': job.job_title,
+            'total_candidates': job.total_candidates,
+            'scheduled_interviews': job.scheduled_interviews,
+            'interviews_done': job.interviews_done,
+        })
+        
+    return Response(summary)
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def interviews_done_count(request):
+    """
+    Returns the number of interviews that have at least one conversation record.
+    """
+    company_id = request.query_params.get('company_id')
+    if not company_id:
+        return Response({"error": "company_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    count = InterviewConversation.objects.filter(
+        interview__recruiter=request.user,
+        interview__candidate__job__company_id=company_id
+    ).values('interview').distinct().count()
+    
+    return Response({'interviews_done': count})
+
+
 class InterviewViewSet(viewsets.ModelViewSet):
     queryset = Interview.objects.all()
     permission_classes = [permissions.IsAuthenticated]
@@ -943,10 +991,23 @@ def sync_jobs_for_company(request, company_id):
     
     try:
         synced_jobs = JobSyncService.sync_jobs_for_company(company)
+        
+        all_synced_candidates = []
+        for job in synced_jobs:
+            try:
+                synced_candidates_for_job = CandidateSyncService.sync_candidates_for_job(job)
+                all_synced_candidates.extend(synced_candidates_for_job)
+            except Exception as e:
+                print(f"Error syncing candidates for job {job.job_id}: {e}")
+                # Continue processing other jobs even if one fails
+
         serializer = JobSerializer(synced_jobs, many=True)
+        candidate_serializer = CandidateSerializer(all_synced_candidates, many=True)
+
         return Response({
-            'message': f'Successfully synced {len(synced_jobs)} jobs',
-            'jobs': serializer.data
+            'message': f'Successfully synced {len(synced_jobs)} jobs and {len(all_synced_candidates)} candidates',
+            'jobs': serializer.data,
+            'candidates': candidate_serializer.data
         })
     except Exception as e:
         return Response({'error': f'Failed to sync jobs: {str(e)}'},

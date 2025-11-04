@@ -7,6 +7,9 @@ from users.services.odoo_service import OdooService
 from companies.models import Company
 from job.models import Job
 from job.services.ai_service import generate_job_summary
+import logging
+
+logger = logging.getLogger(__name__)
 
 class JobSyncService:
     @staticmethod
@@ -68,6 +71,7 @@ class JobSyncService:
             
             return synced_jobs
         except Exception as e:
+            logger.error(f"Error syncing jobs for company {company.company_id}: {e}")
             raise
 
     @staticmethod
@@ -119,4 +123,5 @@ class JobSyncService:
             
             return synced_jobs
         except Exception as e:
+            logger.error(f"Error syncing jobs for user {recruiter.id}: {e}")
             raise

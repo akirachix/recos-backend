@@ -78,7 +78,10 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "recos.wsgi.application"
 
-DATABASES = {"default": dj_database_url.config(default=os.getenv("DATABASE_URL"))}
+DATABASES = {"default": dj_database_url.config(
+    default=os.getenv("DATABASE_URL"),
+    # conn_max_age=0
+)}
 if not os.getenv("DATABASE_URL"):
     DATABASES = {
         "default": {
@@ -149,3 +152,11 @@ FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 SITE_NAME = 'Recos'
 PASSWORD_RESET_TIMEOUT = 3600
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+CORS_ALLOW_ALL_ORIGINS = True 
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:3000",
+#     "https://recos-frontend.vercel.app",
+#     'http://localhost:3001',
+#     "http://127.0.0.1:3000",
+# ]

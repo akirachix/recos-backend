@@ -4,7 +4,9 @@ from google.genai import types
 from django.conf import settings
 from ai_reports.utils import extract_text_from_file_object
 from ai_reports.services.ai_analysis_service import get_genai_client, parse_gemini_response
+import logging
 
+logger = logging.getLogger(__name__)
 
 def generate_candidate_skill_summary(candidate):
     """
@@ -18,6 +20,7 @@ def generate_candidate_skill_summary(candidate):
                     text = extract_text_from_file_object(attachment.file)
                     resume_text += f"\n\n--- Document: {attachment.name} ---\n{text}"
                 except Exception as e:
+                    logger.error(f"Error extracting text from attachment {attachment.name}: {e}")
                     continue
         
         if not resume_text.strip():
@@ -71,19 +74,24 @@ def generate_candidate_skill_summary(candidate):
             response_mime_type="application/json",
         )
         
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config=config,
-        )
-        
-        skill_data = parse_gemini_response(response.text)
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+                config=config,
+            )
+            logger.info(f"Gemini API response: {response.text}")
+            skill_data = parse_gemini_response(response.text)
+        except Exception as e:
+            logger.error(f"Gemini API call failed: {e}")
+            return f"Skill summary generation failed due to API error: {str(e)}"
         
         summary = format_skill_summary(skill_data)
         
         return summary
         
     except Exception as e:
+        logger.error(f"An unexpected error occurred in generate_candidate_skill_summary: {e}")
         return f"Skill summary generation failed: {str(e)}"
 
 

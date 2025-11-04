@@ -22,5 +22,8 @@ class Job(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ('company', 'odoo_job_id')
+
     def __str__(self):
         return self.job_title   

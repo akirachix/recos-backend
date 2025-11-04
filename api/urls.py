@@ -12,6 +12,8 @@ router.register(r'interview', InterviewViewSet, basename='interview')
 router.register(r'ai-reports', AIReportViewSet, basename='ai-report')
 
 urlpatterns = [
+    path('metrics/job-summary/', views.job_summary, name='job-summary'),
+    path('metrics/interviews-done/', views.interviews_done_count, name='interviews-done-count'),
     path('', include(router.urls)),
     path('register/', views.RecruiterRegistrationView.as_view(), name='register'),
     path('login/', views.login_view, name='login'),

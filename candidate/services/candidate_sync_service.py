@@ -224,7 +224,10 @@ class CandidateSyncService:
         if not odoo_date_string:
             return None
         try:
-            return parse_datetime(odoo_date_string)
+            naive_dt = parse_datetime(odoo_date_string)
+            if naive_dt and not naive_dt.tzinfo:
+                return timezone.make_aware(naive_dt)
+            return naive_dt
         except (ValueError, TypeError):
             return None
 

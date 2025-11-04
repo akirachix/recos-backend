@@ -1,4 +1,5 @@
-from rest_framework import serializers
+from rest_framework import serializers, viewsets, status
+from rest_framework.response import Response
 from interview.models import Interview
 from interviewConversation.models import InterviewConversation
 from job.models import Job
@@ -45,10 +46,35 @@ class CandidateAttachmentSerializer(serializers.ModelSerializer):
         else:
             return "File"
 
+
 class InterviewConversationSerializer(serializers.ModelSerializer):
+    summary = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    semantics = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    questions = serializers.ListField(
+        child=serializers.CharField(), write_only=True, required=False
+    )
+
     class Meta:
         model = InterviewConversation
         fields = '__all__'
+
+    def create(self, validated_data):
+        summary = validated_data.pop('summary', None)
+        semantics = validated_data.pop('semantics', None)
+        questions = validated_data.pop('questions', None)
+        
+        if summary is not None:
+            validated_data['expected_answer'] = summary
+        if semantics is not None:
+            validated_data['candidate_answer'] = semantics
+
+        if 'question_text' not in validated_data or not validated_data['question_text']:
+            validated_data['question_text'] = summary if summary else ""
+
+        return super().create(validated_data)
+
+
+
 
 class InterviewSerializer(serializers.ModelSerializer):
     candidate_name = serializers.CharField(source='candidate.name', read_only=True)
@@ -148,10 +174,14 @@ class InterviewListSerializer(serializers.ModelSerializer):
     job_title = serializers.CharField(source='job.job_title', read_only=True)
     company_name = serializers.CharField(source='company.company_name', read_only=True)
     is_upcoming = serializers.BooleanField(read_only=True)
-    
+    interview_id = serializers.IntegerField(read_only=True) 
+    interview_link = serializers.CharField(read_only=True) 
+
     class Meta:
         model = Interview
         fields = [
+            'interview_id',     
+            'interview_link',   
             'candidate_id', 'candidate_name', 'job_title', 'company_name', 'scheduled_at',
             'status', 'is_upcoming', 'created_at'
         ]
