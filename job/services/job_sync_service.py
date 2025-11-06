@@ -59,12 +59,14 @@ class JobSyncService:
                     defaults={
                         'job_title': odoo_job['name'],
                         'job_description': job_description,
-                        'generated_job_summary': generate_job_summary(job_description) if job_description else 'No job description available for summary generation.',
                         'state': odoo_job.get('state', 'open'),
                         'expired_at': timezone.now() + timedelta(days=365),
                         'posted_at': JobSyncService._parse_odoo_date(odoo_job.get('create_date'))
                     }
                 )
+                if job_description and not job.generated_job_summary:
+                    job.generated_job_summary = generate_job_summary(job)
+                    job.save()
                 
                 action = "Created" if created else "Updated"
                 synced_jobs.append(job)
@@ -112,12 +114,14 @@ class JobSyncService:
                     defaults={
                         'job_title': odoo_job['name'],
                         'job_description': odoo_job.get('description', ''),
-                        'generated_job_summary': generate_job_summary(odoo_job.get('description', '')),
                         'state': odoo_job.get('state', 'open'),
                         'expired_at': timezone.now() + timedelta(days=365),
                         'posted_at': JobSyncService._parse_odoo_date(odoo_job.get('create_date'))
                     }
                 )
+                if odoo_job.get('description', '') and not job.generated_job_summary:
+                    job.generated_job_summary = generate_job_summary(job)
+                    job.save()
                 
                 synced_jobs.append(job)
             

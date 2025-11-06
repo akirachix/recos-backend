@@ -65,9 +65,6 @@ User = get_user_model()
 
 code_storage = {}
 
-
-
-
 class ForgotPasswordView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -383,6 +380,7 @@ def download_candidate_attachment(request, candidate_id, attachment_id):
             {'error': 'Attachment not found or access denied'}, 
             status=status.HTTP_404_NOT_FOUND
         )
+    
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def sync_candidate_attachments(request, candidate_id):
@@ -455,12 +453,17 @@ def job_summary(request):
 
     jobs = Job.objects.filter(company__recruiter=request.user, company_id=company_id).annotate(
         total_candidates=Count('candidates', distinct=True),
-        scheduled_interviews=Count('candidates__interviews', filter=Q(candidates__interviews__status__in=['scheduled', 'in_progress']), distinct=True),
+        scheduled_interviews=Count('candidates__interviews__interview_id', filter=Q(candidates__interviews__status__in=['draft']), distinct=True),
         interviews_done=Count('candidates__interviews__conversations', distinct=True)
     )
     
     summary = []
+    grand_total_scheduled_interviews = 0
+    grand_total_interviews_done = 0
+
     for job in jobs:
+        grand_total_scheduled_interviews += job.scheduled_interviews
+        grand_total_interviews_done += job.interviews_done
         summary.append({
             'job_id': job.job_id,
             'job_title': job.job_title,
@@ -468,8 +471,12 @@ def job_summary(request):
             'scheduled_interviews': job.scheduled_interviews,
             'interviews_done': job.interviews_done,
         })
-        
-    return Response(summary)
+
+    return Response({
+        'jobs_summary': summary,
+        'grand_total_scheduled_interviews': grand_total_scheduled_interviews,
+        'grand_total_interviews_done': grand_total_interviews_done,
+    })
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])

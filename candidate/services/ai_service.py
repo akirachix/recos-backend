@@ -12,6 +12,9 @@ def generate_candidate_skill_summary(candidate):
     """
     Generate a skill summary for a candidate based on their resume attachments
     """
+    if candidate.generated_skill_summary:
+        return candidate.generated_skill_summary
+
     try:
         resume_text = ""
         for attachment in candidate.attachments.all():
@@ -87,7 +90,9 @@ def generate_candidate_skill_summary(candidate):
             return f"Skill summary generation failed due to API error: {str(e)}"
         
         summary = format_skill_summary(skill_data)
-        
+        candidate.generated_skill_summary = summary
+        candidate.save()
+
         return summary
         
     except Exception as e:

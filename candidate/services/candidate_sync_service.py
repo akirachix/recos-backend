@@ -41,7 +41,7 @@ class CandidateSyncService:
                 try:
                     candidate = CandidateSyncService._process_single_candidate(odoo_candidate, job)
                     CandidateSyncService.sync_attachments_for_candidate(candidate, odoo_service)
-                    if candidate.attachments.exists():
+                    if candidate.attachments.exists() and not candidate.generated_skill_summary:
                         skill_summary = generate_candidate_skill_summary(candidate)
                         candidate.generated_skill_summary = skill_summary
                         candidate.save()
@@ -377,7 +377,7 @@ class CandidateSyncService:
                     failed_count += 1
                     continue
         
-            if synced_count > 0:
+            if synced_count > 0 and not candidate.generated_skill_summary:
                 skill_summary = generate_candidate_skill_summary(candidate)
                 candidate.generated_skill_summary = skill_summary
                 candidate.save()

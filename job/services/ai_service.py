@@ -17,11 +17,15 @@ def get_genai_client():
     except Exception as e:
         return None
     
-def generate_job_summary(job_description):
+def generate_job_summary(job):
     """
     Generate a concise job summary using Google's Generative AI
     """
+    if job.generated_job_summary:
+        return job.generated_job_summary
+
     try:
+        job_description = job.job_description
         if not job_description or len(job_description.strip()) < 10:
             return "Job description is too short to generate a summary."
         
@@ -63,7 +67,10 @@ def generate_job_summary(job_description):
         summary_data = parse_gemini_response(response.text)
         
         if isinstance(summary_data, dict) and 'job_summary' in summary_data:
-            return summary_data['job_summary'].strip()
+            summary = summary_data['job_summary'].strip()
+            job.generated_job_summary = summary
+            job.save()
+            return summary
         else:
             return "Summary generation failed: Unexpected response format"
             
